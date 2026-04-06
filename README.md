@@ -87,7 +87,7 @@
 
 ## 9. 💬 Chat (Comunicação Aluno ↔ Empresa)
 - Chat individual entre aluno e empresa após candidatura
-- Envio de mensagens em tempo real
+- Envio de mensagens
 - Histórico de mensagens
 - Identificação de remetente (aluno/empresa)
 
@@ -117,6 +117,14 @@
 - Avaliação com:
   - Nota
   - Comentário
+
+---
+
+## 13. 🗺️ Mapa de Vagas (Funcionalidade Extra)
+- Exibição das vagas em mapa interativo
+- Visualização por meio de pins (marcadores)
+- Clique no pin para visualizar detalhes da vaga
+- Integração com sistema de localização (latitude/longitude)
 
 ## 🚀 Tecnologias Utilizadas
 
