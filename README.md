@@ -143,3 +143,21 @@
 ### 🐳 Infraestrutura
 - Docker
 - Docker Compose
+
+## 🚀 Tecnologias Utilizadas
+
+### 🎨 Frontend
+- Flutter (Web)
+
+### ⚙️ Backend
+- TypeScript
+- Node.js
+- Express
+
+### 🗄️ Banco de Dados
+- PostgreSQL
+- TypeORM (ORM para integração com o banco)
+
+### 🐳 Infraestrutura
+- Docker
+- Docker Compose
