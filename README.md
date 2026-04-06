@@ -1,4 +1,4 @@
-# nexa
+# Nexa
 # 📌 Funcionalidades do Sistema
 
 ## 1. 🔐 Autenticação de Usuários
@@ -18,7 +18,7 @@
 - Upload de currículo:
   - Apenas PDF
   - Limite de tamanho
-  - Processamento interno para renomeação do arquivo
+  - Renomeação do arquivo
 - Atualização de dados
 
 ---
@@ -70,7 +70,7 @@
 ## 7. 🧠 Compatibilidade (Match)
 - Comparar:
   - Habilidades do aluno
-  - Requisitos da vaga (padronizados, ex: período, carga horária, etc)
+  - Requisitos da vaga (padronizados, ex: período, carga horária, etc.)
   - Distância
 - Exibir percentual de compatibilidade
 
@@ -85,7 +85,15 @@
 
 ---
 
-## 9. 📊 Dashboard do Aluno
+## 9. 💬 Chat (Comunicação Aluno ↔ Empresa)
+- Chat individual entre aluno e empresa após candidatura
+- Envio de mensagens em tempo real
+- Histórico de mensagens
+- Identificação de remetente (aluno/empresa)
+
+---
+
+## 10. 📊 Dashboard do Aluno
 - Total de candidaturas
 - Status:
   - Enviadas
@@ -95,17 +103,35 @@
 
 ---
 
-## 10. 📊 Dashboard da Empresa
+## 11. 📊 Dashboard da Empresa
 - Total de vagas criadas
 - Total de candidatos por vaga
 - Lista de candidatos
 
 ---
 
-## 11. ⭐ Avaliação de Vagas/Empresas
+## 12. ⭐ Avaliação de Vagas/Empresas
 - Aluno pode avaliar:
   - Empresa
   - Experiência
 - Avaliação com:
   - Nota
   - Comentário
+
+## 🚀 Tecnologias Utilizadas
+
+### 🎨 Frontend
+- Flutter (Web)
+
+### ⚙️ Backend
+- TypeScript
+- Node.js
+- Express
+
+### 🗄️ Banco de Dados
+- PostgreSQL
+- TypeORM (ORM para integração com o banco)
+
+### 🐳 Infraestrutura
+- Docker
+- Docker Compose
