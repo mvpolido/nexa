@@ -1,0 +1,5 @@
+#Para o Docker não ficar
+#lento tentando copiar a pasta node_modules (que é pesada)
+
+node_modules
+dist
