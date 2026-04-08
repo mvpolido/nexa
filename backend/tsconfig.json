@@ -5,6 +5,10 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "esModuleInterop": true,
-    "strict": true
+    "strict": true,
+    "experimentalDecorators": true, // Habilita o uso de @Entity, @Column, etc
+    "emitDecoratorMetadata": true,  // Permite que o TypeORM entenda os tipos das colunas
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
   }
 }
