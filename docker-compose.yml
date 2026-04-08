@@ -1,6 +1,4 @@
-version: '3.8'
-
-services:
+services:  
   db:
     image: postgres:15-alpine
     container_name: nexa_db
@@ -22,12 +20,19 @@ services:
     depends_on:
       - db
     environment:
-      # Essas variáveis ajudam o TypeORM a se conectar
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: nexa_user
       DB_PASS: nexa_password
       DB_NAME: nexa_db
+
+  frontend:  
+    build: ./frontend
+    container_name: nexa_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
