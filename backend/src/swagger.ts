@@ -29,7 +29,7 @@ const options = {
       }
     }
   },
-  apis: [], // DEIXE VAZIO! Assim ele não tenta ler seus arquivos e não crasha.
+  apis: [], // Deixamos vazio para evitar erros de parser nos comentários
 };
 
 export const swaggerSpec = swaggerJSDoc(options);
