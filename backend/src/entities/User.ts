@@ -1,26 +1,3 @@
-<<<<<<< HEAD
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from "typeorm";
-
-@Entity("users")
-export class User {
-    @PrimaryGeneratedColumn("uuid")
-    id!: string; // Adicionada a !
-
-    @Column({ unique: true })
-    email!: string; // Adicionada a !
-
-    @Column({ select: false })
-    password!: string; // Adicionada a !
-
-    @Column()
-    name!: string; // Adicionada a !
-
-    @CreateDateColumn()
-    createdAt!: Date; // Adicionada a !
-
-    @UpdateDateColumn()
-    updatedAt!: Date; // Adicionada a !
-=======
 import { 
   Entity, 
   PrimaryGeneratedColumn, 
@@ -37,7 +14,7 @@ export enum UserRole {
 @Entity("users")
 export class User {
   @PrimaryGeneratedColumn("uuid")
-  id!: string; // O '!' resolve o erro de inicialização
+  id!: string;
 
   @Column({ type: "varchar", length: 100 })
   name!: string;
@@ -60,5 +37,4 @@ export class User {
 
   @UpdateDateColumn()
   updated_at!: Date;
->>>>>>> feat/auth-user-routes
 }
