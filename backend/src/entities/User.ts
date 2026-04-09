@@ -14,7 +14,7 @@ export enum UserRole {
 @Entity("users")
 export class User {
   @PrimaryGeneratedColumn("uuid")
-  id!: string; // O '!' resolve o erro de inicialização
+  id!: string;
 
   @Column({ type: "varchar", length: 100 })
   name!: string;
