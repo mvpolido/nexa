@@ -6,8 +6,8 @@
     "outDir": "./dist",
     "esModuleInterop": true,
     "strict": true,
-    "experimentalDecorators": true, // Habilita o uso de @Entity, @Column, etc
-    "emitDecoratorMetadata": true,  // Permite que o TypeORM entenda os tipos das colunas
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   }
