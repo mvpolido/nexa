@@ -1,16 +1,17 @@
 import "reflect-metadata";
 import { DataSource } from "typeorm";
+import { User } from "./entities/User"; // Adicione este import manual
 
 export const AppDataSource = new DataSource({
     type: "postgres",
-    host: "db", // Nome do serviço no seu docker-compose
+    host: "db",
     port: 5432,
     username: "nexa_user",
     password: "nexa_password",
     database: "nexa_db",
-    synchronize: true, // CUIDADO: Em produção deve ser false. Aqui ele cria as tabelas sozinho.
+    synchronize: true, // Garante que a tabela seja criada
     logging: true,
-    entities: ["src/entities/*.ts"],
-    migrations: ["src/migrations/*.ts"],
+    entities: [User], // Coloque a classe diretamente aqui
+    migrations: [],
     subscribers: [],
 });
