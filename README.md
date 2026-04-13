@@ -118,14 +118,6 @@
   - Nota
   - Comentário
 
----
-
-## 13. 🗺️ Mapa de Vagas (Funcionalidade Extra)
-- Exibição das vagas em mapa interativo
-- Visualização por meio de pins (marcadores)
-- Clique no pin para visualizar detalhes da vaga
-- Integração com sistema de localização (latitude/longitude)
-
 ## 🚀 Tecnologias Utilizadas
 
 ### 🎨 Frontend
