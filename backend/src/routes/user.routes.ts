@@ -1,9 +1,13 @@
-import { Router } from 'express';
+import { Router } from "express";
+import { UserController } from "../controllers/UserController";
+
 const router = Router();
 
-
-router.get('/profile', (req, res) => {
-  res.status(200).json({ name: 'Felipe', role: 'student' });
-});
+// Rotas do CRUD
+router.post("/", UserController.create);
+router.get("/", UserController.getAll);
+router.get("/:id", UserController.getById);
+router.put("/:id", UserController.update);
+router.delete("/:id", UserController.delete);
 
 export default router;
