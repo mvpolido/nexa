@@ -13,8 +13,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   backend:
-    build: ./backend
+    build: 
+      context: ./backend
+      target: build
     container_name: nexa_backend
+    restart: always
     ports:
       - "3000:3000"
     depends_on:
@@ -25,6 +28,10 @@ services:
       DB_USER: nexa_user
       DB_PASS: nexa_password
       DB_NAME: nexa_db
+    volumes:
+      - ./backend:/app             # 👈 O Túnel: conecta seu Linux Mint ao Container
+      - /app/node_modules          # 👈 Mantém as bibliotecas isoladas
+    command: npx ts-node-dev --respawn --transpile-only src/index.ts # 👈 Faz atualizar ao salvar
 
   frontend:  
     build: ./frontend
