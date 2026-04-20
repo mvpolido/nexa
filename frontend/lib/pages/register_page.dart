@@ -1,27 +1,30 @@
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/material.dart';
 import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
 
+  final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  String _perfil = 'aluno';
   bool _isLoading = false;
   String? _errorMessage;
   bool _obscurePassword = true;
 
   @override
   void dispose() {
+    _nomeController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -39,22 +42,21 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:3000/auth/login'),
+        Uri.parse('http://localhost:3000/auth/register'),
         headers: {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
+          'nome_exibicao': _nomeController.text.trim(),
           'email': _emailController.text.trim(),
           'password': _passwordController.text,
+          'perfil': _perfil,
         }),
       );
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 200) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', data['token']);
-
+      if (response.statusCode == 201) {
         if (!mounted) return;
 
         setState(() {
@@ -62,16 +64,16 @@ class _LoginPageState extends State<LoginPage> {
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Login realizado com sucesso')),
+          const SnackBar(content: Text('Cadastro realizado com sucesso')),
         );
 
-        Navigator.of(context).pushReplacementNamed('/home');
+        Navigator.of(context).pushReplacementNamed('/');
       } else {
         if (!mounted) return;
 
         setState(() {
           _isLoading = false;
-          _errorMessage = data['message'] ?? 'Erro ao fazer login';
+          _errorMessage = data['message'] ?? 'Erro ao cadastrar';
         });
       }
     } catch (e) {
@@ -88,21 +90,21 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Login'),
+        title: const Text('Cadastro'),
         centerTitle: true,
       ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
+            constraints: const BoxConstraints(maxWidth: 450),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'Entrar no Nexa',
+                    'Criar conta no Nexa',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 28,
@@ -111,10 +113,31 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Faça login para continuar',
+                    'Preencha os dados para se cadastrar',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
+                  TextFormField(
+                    controller: _nomeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nome',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      final nome = value?.trim() ?? '';
+
+                      if (nome.isEmpty) {
+                        return 'Informe o nome';
+                      }
+
+                      if (nome.length < 3) {
+                        return 'O nome deve ter pelo menos 3 caracteres';
+                      }
+
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -171,6 +194,31 @@ class _LoginPageState extends State<LoginPage> {
                     },
                   ),
                   const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: _perfil,
+                    decoration: const InputDecoration(
+                      labelText: 'Perfil',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'aluno',
+                        child: Text('Aluno'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'empresa',
+                        child: Text('Empresa'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+
+                      setState(() {
+                        _perfil = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   if (_errorMessage != null) ...[
                     Text(
                       _errorMessage!,
@@ -189,15 +237,15 @@ class _LoginPageState extends State<LoginPage> {
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Entrar'),
+                          : const Text('Cadastrar'),
                     ),
                   ),
                   const SizedBox(height: 16),
                   TextButton(
                     onPressed: () {
-                      Navigator.of(context).pushReplacementNamed('/register');
+                      Navigator.of(context).pushReplacementNamed('/');
                     },
-                    child: const Text('Ainda não tenho conta'),
+                    child: const Text('Já tenho conta'),
                   ),
                 ],
               ),
