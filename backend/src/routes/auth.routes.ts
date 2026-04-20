@@ -78,10 +78,53 @@ router.post("/register", async (req, res) => {
   }
 });
 
-router.post("/login", async (_req, res) => {
-  return res.status(501).json({
-    message: "Login ainda não implementado",
-  });
+router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Campos obrigatórios faltando",
+      });
+    }
+
+    const usuarioRepository = AppDataSource.getRepository(Usuario);
+
+    const usuario = await usuarioRepository
+      .createQueryBuilder("usuario")
+      .addSelect("usuario.senha_hash")
+      .where("usuario.email = :email", { email })
+      .getOne();
+
+    if (!usuario) {
+      return res.status(401).json({
+        message: "Credenciais inválidas",
+      });
+    }
+
+    const senhaCorreta = await bcrypt.compare(password, usuario.senha_hash);
+
+    if (!senhaCorreta) {
+      return res.status(401).json({
+        message: "Credenciais inválidas",
+      });
+    }
+
+    return res.status(200).json({
+      token: "jwt-token-fake",
+      user: {
+        id: usuario.id,
+        nome_exibicao: usuario.nome_exibicao,
+        email: usuario.email,
+        perfil: usuario.perfil,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      message: "Erro interno no servidor",
+      error: error.message,
+    });
+  }
 });
 
 export default router;
