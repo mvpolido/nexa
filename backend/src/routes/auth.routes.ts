@@ -1,3 +1,4 @@
+import jwt from "jsonwebtoken";
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { AppDataSource } from "../data-source";
@@ -110,15 +111,24 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    return res.status(200).json({
-      token: "jwt-token-fake",
-      user: {
-        id: usuario.id,
-        nome_exibicao: usuario.nome_exibicao,
-        email: usuario.email,
-        perfil: usuario.perfil,
-      },
-    });
+  const token = jwt.sign(
+    {
+      userId: usuario.id,
+      perfil: usuario.perfil,
+    },
+    process.env.JWT_SECRET || "default_secret",
+    { expiresIn: "1d" }
+  );
+
+  return res.status(200).json({
+    token: token,
+    user: {
+      id: usuario.id,
+      nome_exibicao: usuario.nome_exibicao,
+      email: usuario.email,
+      perfil: usuario.perfil,
+    },
+  });
   } catch (error: any) {
     return res.status(500).json({
       message: "Erro interno no servidor",
