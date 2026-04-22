@@ -28,6 +28,8 @@ services:
       DB_USER: nexa_user
       DB_PASS: nexa_password
       DB_NAME: nexa_db
+      JWT_SECRET: supersecret
+
     volumes:
       - ./backend:/app             # 👈 O Túnel: conecta seu Linux Mint ao Container
       - /app/node_modules          # 👈 Mantém as bibliotecas isoladas
