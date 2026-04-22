@@ -41,20 +41,11 @@ const options = {
               "application/json": {
                 schema: {
                   type: "object",
-                  required: ["nome_exibicao", "email", "password", "perfil"],
+                  required: ["nome_exibicao", "email", "senha", "perfil"], // 👈 Corrigido para 'senha'
                   properties: {
-                    nome_exibicao: {
-                      type: "string",
-                      example: "Maria Vitória",
-                    },
-                    email: {
-                      type: "string",
-                      example: "maria@email.com",
-                    },
-                    password: {
-                      type: "string",
-                      example: "123456",
-                    },
+                    nome_exibicao: { type: "string", example: "Maria Vitória" },
+                    email: { type: "string", example: "maria@email.com" },
+                    senha: { type: "string", example: "123456" },           // 👈 Corrigido
                     perfil: {
                       type: "string",
                       enum: ["aluno", "empresa"],
@@ -74,81 +65,15 @@ const options = {
                     type: "object",
                     properties: {
                       id: { type: "integer", example: 1 },
-                      nome_exibicao: {
-                        type: "string",
-                        example: "Maria Vitória",
-                      },
-                      email: {
-                        type: "string",
-                        example: "maria@email.com",
-                      },
-                      perfil: {
-                        type: "string",
-                        example: "aluno",
-                      },
-                      criado_em: {
-                        type: "string",
-                        example: "2026-04-20T18:38:22.805Z",
-                      },
-                      atualizado_em: {
-                        type: "string",
-                        example: "2026-04-20T18:38:22.805Z",
-                      },
+                      nome_exibicao: { type: "string" },
+                      email: { type: "string" },
+                      perfil: { type: "string" },
+                      criado_em: { type: "string", format: "date-time" },
+                      atualizado_em: { type: "string", format: "date-time" },
                     },
                   },
                 },
               },
-            },
-            400: {
-              description: "Campos obrigatórios faltando ou perfil inválido",
-            },
-            409: {
-              description: "Email já cadastrado",
-            },
-            500: {
-              description: "Erro interno no servidor",
-            },
-          },
-        },
-      },
-
-      "/auth/login": {
-        post: {
-          summary: "Autentica um usuário",
-          tags: ["Auth"],
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["email", "password"],
-                  properties: {
-                    email: {
-                      type: "string",
-                      example: "maria@email.com",
-                    },
-                    password: {
-                      type: "string",
-                      example: "123456",
-                    },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: {
-              description: "Login realizado com sucesso",
-            },
-            400: {
-              description: "Campos obrigatórios faltando",
-            },
-            401: {
-              description: "Credenciais inválidas",
-            },
-            500: {
-              description: "Erro interno no servidor",
             },
           },
         },
@@ -164,22 +89,15 @@ const options = {
               "application/json": {
                 schema: {
                   type: "object",
+                  required: ["nome_exibicao", "email", "senha", "perfil"], // 👈 Corrigido
                   properties: {
-                    nome_exibicao: {
-                      type: "string",
-                      example: "Felipe Salazar",
-                    },
-                    email: {
-                      type: "string",
-                      example: "felipe@teste.com",
-                    },
-                    password: {
-                      type: "string",
-                      example: "senha123",
-                    },
+                    nome_exibicao: { type: "string", example: "Felipe Salazar" },
+                    email: { type: "string", example: "felipe@teste.com" },
+                    senha: { type: "string", example: "senha123" },           // 👈 Corrigido
                     perfil: {
                       type: "string",
-                      example: "aluno",
+                      enum: ["aluno", "empresa"],
+                      example: "aluno"
                     },
                   },
                 },
@@ -194,7 +112,27 @@ const options = {
         get: {
           summary: "Lista todos os usuários",
           tags: ["Users"],
-          responses: { 200: { description: "OK" } },
+          responses: { 
+            200: { 
+              description: "Lista de usuários retornada com sucesso",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "integer" },
+                        nome_exibicao: { type: "string" },
+                        email: { type: "string" },
+                        perfil: { type: "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            } 
+          },
         },
       },
 
@@ -207,7 +145,7 @@ const options = {
               name: "id",
               in: "path",
               required: true,
-              schema: { type: "string" },
+              schema: { type: "integer" }, // 👈 Corrigido para integer (conforme sua entidade Usuario)
             },
           ],
           responses: {
@@ -223,7 +161,7 @@ const options = {
               name: "id",
               in: "path",
               required: true,
-              schema: { type: "string" },
+              schema: { type: "integer" }, // 👈 Corrigido
             },
           ],
           requestBody: {
@@ -233,14 +171,8 @@ const options = {
                 schema: {
                   type: "object",
                   properties: {
-                    nome_exibicao: {
-                      type: "string",
-                      example: "Felipe Atualizado",
-                    },
-                    perfil: {
-                      type: "string",
-                      example: "empresa",
-                    },
+                    nome_exibicao: { type: "string", example: "Felipe Atualizado" },
+                    perfil: { type: "string", enum: ["aluno", "empresa"], example: "empresa" },
                   },
                 },
               },
@@ -258,7 +190,7 @@ const options = {
               name: "id",
               in: "path",
               required: true,
-              schema: { type: "string" },
+              schema: { type: "integer" }, // 👈 Corrigido
             },
           ],
           responses: {
