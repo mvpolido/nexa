@@ -3,9 +3,11 @@ import {
   PrimaryColumn,
   Column,
   OneToOne,
+  OneToMany, 
   JoinColumn
 } from "typeorm";
 import { Usuario } from "./Usuario";
+import { Vaga } from "./Vaga"; 
 
 @Entity("empresa")
 export class Empresa {
@@ -24,8 +26,12 @@ export class Empresa {
   @Column({ type: "decimal", precision: 11, scale: 8, nullable: true })
   longitude?: number;
 
-  //Relacionamento 1:1 com Usuario
-  @OneToOne(() => Usuario, usuario => usuario.empresa, { onDelete: "CASCADE" })
+  // Relacionamento 1:1 com Usuario
+  @OneToOne(() => Usuario, (usuario) => usuario.empresa, { onDelete: "CASCADE" })
   @JoinColumn({ name: "id" })
   usuario?: Usuario;
+
+  // Relacionamento 1:N com Vagas (Corrigido)
+  @OneToMany(() => Vaga, (vaga) => vaga.empresa)
+  vagas!: Vaga[];
 }

@@ -10,9 +10,11 @@ const router = Router();
 
 router.post("/register", async (req, res) => {
   try {
-    const { nome_exibicao, email, password, perfil } = req.body;
+    // 1. Alterado de 'password' para 'senha' para bater com o Swagger
+    const { nome_exibicao, email, senha, perfil } = req.body;
 
-    if (!nome_exibicao || !email || !password || !perfil) {
+    // 2. Verificação atualizada para 'senha'
+    if (!nome_exibicao || !email || !senha || !perfil) {
       return res.status(400).json({
         message: "Campos obrigatórios faltando",
       });
@@ -38,7 +40,8 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    const senhaHash = await bcrypt.hash(password, 10);
+    // 3. Hash feito sobre a variável 'senha'
+    const senhaHash = await bcrypt.hash(senha, 10);
 
     const novoUsuario = usuarioRepository.create({
       nome_exibicao,
@@ -81,9 +84,10 @@ router.post("/register", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // 4. Alterado de 'password' para 'senha' aqui também
+    const { email, senha } = req.body;
 
-    if (!email || !password) {
+    if (!email || !senha) {
       return res.status(400).json({
         message: "Campos obrigatórios faltando",
       });
@@ -103,7 +107,8 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const senhaCorreta = await bcrypt.compare(password, usuario.senha_hash);
+    // 5. Comparação usando a variável 'senha'
+    const senhaCorreta = await bcrypt.compare(senha, usuario.senha_hash);
 
     if (!senhaCorreta) {
       return res.status(401).json({
@@ -111,24 +116,24 @@ router.post("/login", async (req, res) => {
       });
     }
 
-  const token = jwt.sign(
-    {
-      userId: usuario.id,
-      perfil: usuario.perfil,
-    },
-    process.env.JWT_SECRET || "default_secret",
-    { expiresIn: "1d" }
-  );
+    const token = jwt.sign(
+      {
+        userId: usuario.id,
+        perfil: usuario.perfil,
+      },
+      process.env.JWT_SECRET || "default_secret",
+      { expiresIn: "1d" }
+    );
 
-  return res.status(200).json({
-    token: token,
-    user: {
-      id: usuario.id,
-      nome_exibicao: usuario.nome_exibicao,
-      email: usuario.email,
-      perfil: usuario.perfil,
-    },
-  });
+    return res.status(200).json({
+      token: token,
+      user: {
+        id: usuario.id,
+        nome_exibicao: usuario.nome_exibicao,
+        email: usuario.email,
+        perfil: usuario.perfil,
+      },
+    });
   } catch (error: any) {
     return res.status(500).json({
       message: "Erro interno no servidor",

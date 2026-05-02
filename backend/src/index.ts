@@ -8,7 +8,8 @@ import { swaggerSpec } from './swagger';
 // Importação das rotas
 import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
-import userRoutes from './routes/user.routes'; // Garanta que este arquivo existe em src/routes/
+import userRoutes from './routes/user.routes'; 
+import vagaRoutes from './routes/vaga.routes';
 
 const app = express();
 app.use(cors());
@@ -25,7 +26,8 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // Aplicação das rotas
 app.use(healthRoutes);
 app.use('/auth', authRoutes);
-app.use('/users', userRoutes); // O prefixo /users será aplicado a todas as rotas dentro de userRoutes
+app.use('/users', userRoutes); 
+app.use('/vagas', vagaRoutes);
 
 const startServer = async () => {
   let retries = 5;

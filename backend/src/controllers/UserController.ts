@@ -5,29 +5,37 @@ import bcrypt from "bcrypt";
 
 export class UserController {
   static async create(req: Request, res: Response) {
-    const { nome_exibicao, email, senha_hash, perfil } = req.body;
+    // 1. Mudamos aqui para receber "senha" do corpo da requisição (Swagger)
+    const { nome_exibicao, email, senha, perfil } = req.body;
 
-    if (!nome_exibicao || !email || !senha_hash || !perfil) {
+    // 2. A validação agora verifica "senha"
+    if (!nome_exibicao || !email || !senha || !perfil) {
       return res.status(400).json({ message: "Campos obrigatórios faltando" });
     }
 
     const usuarioRepository = AppDataSource.getRepository(Usuario);
 
     try {
-      const hashedPassword = await bcrypt.hash(senha_hash, 10);
+      // 3. O hash é feito sobre a variável "senha"
+      const hashedPassword = await bcrypt.hash(senha, 10);
 
       const newUser = usuarioRepository.create({
         nome_exibicao,
         email,
-        senha_hash: hashedPassword,
+        senha_hash: hashedPassword, // 4. E salvo no campo correto do banco
         perfil
       });
 
       await usuarioRepository.save(newUser);
 
+      // Removemos a senha_hash da resposta por segurança
       const { senha_hash: _, ...userWithoutPassword } = newUser;
       return res.status(201).json(userWithoutPassword);
     } catch (error: any) {
+      // Tratamento de erro caso o e-mail já exista
+      if (error.code === '23505') {
+        return res.status(409).json({ message: "Email já cadastrado" });
+      }
       return res.status(500).json({ message: error.message });
     }
   }
