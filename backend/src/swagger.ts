@@ -66,7 +66,22 @@ const options = {
             },
           },
           responses: {
-            201: { description: "Usuário criado com sucesso" },
+            201: { 
+              description: "Usuário criado com sucesso",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "integer", example: 1 },
+                      nome_exibicao: { type: "string" },
+                      email: { type: "string" },
+                      perfil: { type: "string" },
+                    }
+                  }
+                }
+              }
+            },
             409: { description: "Email já cadastrado" },
           },
         },
@@ -128,8 +143,8 @@ const options = {
                       enum: ["PRESENCIAL", "REMOTO", "HIBRIDO"],
                       example: "REMOTO" 
                     },
-                    latitude: { type: "number", example: -23.5505 },
-                    longitude: { type: "number", example: -46.6333 },
+                    latitude: { type: "number", example: -24.5505 },
+                    longitude: { type: "number", example: -45.6333 },
                     habilidades: { 
                       type: "array", 
                       items: { type: "string" },
@@ -142,7 +157,7 @@ const options = {
           },
           responses: {
             201: { description: "Vaga criada com sucesso" },
-            403: { description: "Acesso negado: Aluno não pode criar vaga" },
+            403: { description: "Acesso negado" },
           },
         },
       },
@@ -195,6 +210,64 @@ const options = {
           summary: "Lista todos os usuários",
           tags: ["Users"],
           security: [{ bearerAuth: [] }],
+          responses: { 
+            200: { 
+              description: "OK",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "integer" },
+                        nome_exibicao: { type: "string" },
+                        email: { type: "string" },
+                        perfil: { type: "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            } 
+          },
+        },
+      },
+
+      "/users/{id}": {
+        get: {
+          summary: "Busca um usuário pelo ID",
+          tags: ["Users"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: { 200: { description: "OK" }, 404: { description: "Não encontrado" } },
+        },
+        put: {
+          summary: "Atualiza um usuário",
+          tags: ["Users"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    nome_exibicao: { type: "string" },
+                    perfil: { type: "string", enum: ["aluno", "empresa"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: { 200: { description: "OK" } },
+        },
+        delete: {
+          summary: "Deleta um usuário",
+          tags: ["Users"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
           responses: { 200: { description: "OK" } },
         },
       },

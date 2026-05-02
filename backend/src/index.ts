@@ -45,6 +45,7 @@ const startServer = async () => {
     } catch (error) {
       retries--;
       console.error(`❌ Erro na conexão com o banco. Tentativas restantes: ${retries}`);
+      console.error("Detalhe do erro:", error);
       if (retries === 0) {
         console.error("FALHA CRÍTICA: Não foi possível conectar ao banco de dados.");
         process.exit(1);

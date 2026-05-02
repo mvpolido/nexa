@@ -1,119 +1,87 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { Usuario, UsuarioPerfil } from "../entities/Usuario";
+import { Usuario } from "../entities/Usuario";
 import bcrypt from "bcrypt";
 
 export class UserController {
-  static async create(req: Request, res: Response) {
-    // 1. Mudamos aqui para receber "senha" do corpo da requisição (Swagger)
+  static async create(req: Request, res: Response): Promise<Response> {
+    // 1. Recebemos os campos (incluindo 'senha' vinda do Swagger)
     const { nome_exibicao, email, senha, perfil } = req.body;
+    const userRepository = AppDataSource.getRepository(Usuario);
 
-    // 2. A validação agora verifica "senha"
+    // 2. Validação de campos obrigatórios
     if (!nome_exibicao || !email || !senha || !perfil) {
       return res.status(400).json({ message: "Campos obrigatórios faltando" });
     }
 
-    const usuarioRepository = AppDataSource.getRepository(Usuario);
-
     try {
-      // 3. O hash é feito sobre a variável "senha"
-      const hashedPassword = await bcrypt.hash(senha, 10);
+      // 3. Verifica se o e-mail já existe
+      const userExists = await userRepository.findOneBy({ email });
+      if (userExists) {
+        return res.status(400).json({ message: "E-mail já cadastrado" });
+      }
 
-      const newUser = usuarioRepository.create({
+      // 4. Hash da senha
+      const hashedPassword = await bcrypt.hash(senha, 10);
+      
+      const newUser = userRepository.create({
         nome_exibicao,
         email,
-        senha_hash: hashedPassword, // 4. E salvo no campo correto do banco
-        perfil
+        senha_hash: hashedPassword, 
+        perfil,
       });
 
-      await usuarioRepository.save(newUser);
+      // 5. Salva no banco
+      await userRepository.save(newUser);
+      
+      // 6. Segurança: Removemos a senha do retorno
+      const { senha_hash: _, ...usuarioSemSenha } = newUser;
+      return res.status(201).json(usuarioSemSenha);
 
-      // Removemos a senha_hash da resposta por segurança
-      const { senha_hash: _, ...userWithoutPassword } = newUser;
-      return res.status(201).json(userWithoutPassword);
-    } catch (error: any) {
-      // Tratamento de erro caso o e-mail já exista
-      if (error.code === '23505') {
-        return res.status(409).json({ message: "Email já cadastrado" });
-      }
-      return res.status(500).json({ message: error.message });
-    }
-  }
-
-  static async getAll(req: Request, res: Response) {
-    const usuarioRepository = AppDataSource.getRepository(Usuario);
-
-    try {
-      const users = await usuarioRepository.find({
-        select: ["id", "nome_exibicao", "email", "perfil", "criado_em"]
-      });
-
-      return res.json(users);
     } catch (error: any) {
       return res.status(500).json({ message: error.message });
     }
   }
 
-  static async getById(req: Request, res: Response) {
+  static async getAll(req: Request, res: Response): Promise<Response> {
+    const userRepository = AppDataSource.getRepository(Usuario);
+    const users = await userRepository.find(); 
+    return res.json(users);
+  }
+
+  static async getById(req: Request, res: Response): Promise<Response> {
     const { id } = req.params;
-    const usuarioRepository = AppDataSource.getRepository(Usuario);
+    const userRepository = AppDataSource.getRepository(Usuario);
+    const user = await userRepository.findOneBy({ id: Number(id) });
 
-    try {
-      const user = await usuarioRepository.findOne({
-        where: { id: parseInt(id) }
-      });
-
-      if (!user) {
-        return res.status(404).json({ message: "Usuário não encontrado" });
-      }
-
-      const { senha_hash: _, ...userWithoutPassword } = user;
-      return res.json(userWithoutPassword);
-    } catch (error: any) {
-      return res.status(500).json({ message: error.message });
-    }
+    if (!user) return res.status(404).json({ message: "Usuário não encontrado" });
+    return res.json(user);
   }
 
-  static async update(req: Request, res: Response) {
+  static async update(req: Request, res: Response): Promise<Response> {
     const { id } = req.params;
     const { nome_exibicao, perfil } = req.body;
-    const usuarioRepository = AppDataSource.getRepository(Usuario);
+    const userRepository = AppDataSource.getRepository(Usuario);
 
-    try {
-      let user = await usuarioRepository.findOne({
-        where: { id: parseInt(id) }
-      });
+    const user = await userRepository.findOneBy({ id: Number(id) });
+    if (!user) return res.status(404).json({ message: "Usuário não encontrado" });
 
-      if (!user) {
-        return res.status(404).json({ message: "Usuário não encontrado" });
-      }
+    user.nome_exibicao = nome_exibicao || user.nome_exibicao;
+    user.perfil = perfil || user.perfil;
 
-      user.nome_exibicao = nome_exibicao || user.nome_exibicao;
-      user.perfil = perfil || user.perfil;
-
-      await usuarioRepository.save(user);
-
-      const { senha_hash: _, ...userWithoutPassword } = user;
-      return res.json(userWithoutPassword);
-    } catch (error: any) {
-      return res.status(500).json({ message: error.message });
-    }
+    await userRepository.save(user);
+    const { senha_hash: _, ...usuarioSemSenha } = user;
+    return res.json({ message: "Usuário atualizado!", user: usuarioSemSenha });
   }
 
-  static async delete(req: Request, res: Response) {
+  static async delete(req: Request, res: Response): Promise<Response> {
     const { id } = req.params;
-    const usuarioRepository = AppDataSource.getRepository(Usuario);
+    const userRepository = AppDataSource.getRepository(Usuario);
+    const user = await userRepository.findOneBy({ id: Number(id) });
 
-    try {
-      const result = await usuarioRepository.delete(parseInt(id));
+    if (!user) return res.status(404).json({ message: "Usuário não encontrado" });
 
-      if (result.affected === 0) {
-        return res.status(404).json({ message: "Usuário não encontrado" });
-      }
-
-      return res.json({ message: "Usuário deletado com sucesso" });
-    } catch (error: any) {
-      return res.status(500).json({ message: error.message });
-    }
+    await userRepository.remove(user);
+    return res.status(200).json({ message: "Usuário deletado com sucesso!" });
   }
 }
