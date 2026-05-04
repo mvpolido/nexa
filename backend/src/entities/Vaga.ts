@@ -41,11 +41,17 @@ export class Vaga {
   })
   modalidade!: VagaModalidade;
 
+  // 🌍 Mantendo sua implementação de Geolocalização
   @Column({ type: "decimal", precision: 10, scale: 8, nullable: true })
   latitude?: number;
 
   @Column({ type: "decimal", precision: 11, scale: 8, nullable: true })
   longitude?: number;
+
+  // 🛠️ Adicionado: suporte para habilidades simplificadas (opcional)
+  // Se o projeto migrar totalmente para VagaHabilidade, este campo pode ser removido depois.
+  @Column("simple-array", { nullable: true })
+  habilidades?: string[];
 
   @Column({ type: "smallint", default: 1 })
   ativo!: number;
