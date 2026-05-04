@@ -2,6 +2,7 @@ import cors from "cors";
 import "reflect-metadata";
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
+import path from "path"; // 👈 1. Importação necessária para lidar com caminhos
 import { AppDataSource } from "./data-source";
 import { swaggerSpec } from './swagger';
 
@@ -15,6 +16,10 @@ import habilidadeRoutes from './routes/habilidade.routes';
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// 👈 2. Configuração para servir arquivos estáticos
+// Agora, qualquer arquivo em /uploads será acessível via http://localhost:3000/files
+app.use('/files', express.static(path.resolve(__dirname, '..', 'uploads')));
 
 // Rota raiz para teste rápido de vida da API
 app.get('/', (req, res) => {
@@ -47,7 +52,7 @@ const startServer = async () => {
     } catch (error) {
       retries--;
       console.error(`❌ Erro na conexão com o banco. Tentativas restantes: ${retries}`);
-      console.error("Detalhe do erro:", error);
+      // console.error("Detalhe do erro:", error); // Removido o excesso de log se quiser limpar o terminal
       if (retries === 0) {
         console.error("FALHA CRÍTICA: Não foi possível conectar ao banco de dados.");
         process.exit(1);
