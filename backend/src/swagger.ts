@@ -16,6 +16,22 @@ const options = {
           bearerFormat: "JWT",
         },
       },
+      schemas: {
+        Habilidade: {
+          type: "object",
+          properties: {
+            id: { type: "integer", example: 1 },
+            nome: { type: "string", example: "React" },
+          },
+        },
+        HabilidadeInput: {
+          type: "object",
+          required: ["nome"],
+          properties: {
+            nome: { type: "string", example: "Node.js" },
+          },
+        },
+      },
     },
     paths: {
       "/health": {
@@ -109,6 +125,57 @@ const options = {
           responses: {
             200: { description: "Login realizado com sucesso" },
             401: { description: "Credenciais inválidas" },
+          },
+        },
+      },
+
+      "/habilidades": {
+        get: {
+          summary: "Lista habilidades cadastradas",
+          tags: ["Habilidades"],
+          responses: {
+            200: {
+              description: "Lista de habilidades",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/Habilidade" },
+                  },
+                },
+              },
+            },
+            500: { description: "Erro interno do servidor" },
+          },
+        },
+        post: {
+          summary: "Cadastra uma nova habilidade",
+          tags: ["Habilidades"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HabilidadeInput" },
+                examples: {
+                  exemplo: {
+                    value: { nome: "TypeScript" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: "Habilidade criada com sucesso",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Habilidade" },
+                },
+              },
+            },
+            400: { description: "Campo nome é obrigatório" },
+            409: { description: "Habilidade já cadastrada" },
+            500: { description: "Erro interno do servidor" },
           },
         },
       },
