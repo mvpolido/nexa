@@ -13,6 +13,7 @@ import userRoutes from './routes/user.routes';
 import vagaRoutes from './routes/vaga.routes';
 import habilidadeRoutes from './routes/habilidade.routes';
 import { empresaRoutes } from './routes/empresa.routes';
+import candidaturaRoutes from './routes/candidatura.routes';
 
 const app = express();
 app.use(cors());
@@ -38,6 +39,7 @@ app.use('/auth', authRoutes);
 app.use('/users', userRoutes); 
 app.use('/vagas', vagaRoutes);
 app.use('/habilidades', habilidadeRoutes);
+app.use(candidaturaRoutes);
 
 const startServer = async () => {
   let retries = 5;
