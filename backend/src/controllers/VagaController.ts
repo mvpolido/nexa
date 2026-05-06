@@ -1,39 +1,13 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { Vaga } from "../entities/Vaga";
+import { Vaga, VagaModalidade } from "../entities/Vaga";
 import { Empresa } from "../entities/Empresa";
 import { UsuarioPerfil } from "../entities/Usuario";
 
 export class VagaController {
-  // 1. Criar Vaga (Regra: Apenas Empresa pode criar / Aluno recebe 403)
   static async create(req: Request, res: Response) {
-    const { titulo, descricao, requisitos, modalidade, latitude, longitude, habilidades } = req.body;
-    
-    // Dados injetados pelo authMiddleware
-    const usuarioLogadoId = (req as any).usuarioId; 
-    const perfilLogado = (req as any).usuarioPerfil;
-
-    // Validação de Perfil (Critério de Aceite: Aluno recebe 403)
-    if (perfilLogado !== UsuarioPerfil.EMPRESA) {
-      return res.status(403).json({ 
-        message: "Acesso negado: Apenas usuários do tipo Empresa podem publicar vagas." 
-      });
-    }
-
     try {
-      const empresaRepository = AppDataSource.getRepository(Empresa);
-      
-      // Busca a empresa vinculada ao usuário logado
-      const empresa = await empresaRepository.findOne({
-        where: { usuario: { id: usuarioLogadoId } }
-      });
-
-      if (!empresa) {
-        return res.status(404).json({ message: "Perfil de empresa não encontrado para este usuário." });
-      }
-
-      const vagaRepository = AppDataSource.getRepository(Vaga);
-      const novaVaga = vagaRepository.create({
+      const {
         titulo,
         descricao,
         requisitos,
@@ -41,109 +15,210 @@ export class VagaController {
         latitude,
         longitude,
         habilidades,
-        empresa
+      } = req.body;
+
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        return res.status(403).json({
+          message: "Apenas empresas podem publicar vagas.",
+        });
+      }
+
+      if (!titulo || !descricao || !modalidade) {
+        return res.status(400).json({
+          message: "Título, descrição e modalidade são obrigatórios.",
+        });
+      }
+
+      if (!Object.values(VagaModalidade).includes(modalidade)) {
+        return res.status(400).json({
+          message: "Modalidade inválida.",
+        });
+      }
+
+      const empresaRepository = AppDataSource.getRepository(Empresa);
+      const empresa = await empresaRepository.findOne({
+        where: { id: usuarioLogadoId },
       });
 
-      await vagaRepository.save(novaVaga);
-      return res.status(201).json(novaVaga);
+      if (!empresa) {
+        return res.status(404).json({
+          message: "Perfil de empresa não encontrado para este usuário.",
+        });
+      }
+
+      const vagaRepository = AppDataSource.getRepository(Vaga);
+
+      const novaVaga = vagaRepository.create({
+        empresa_id: empresa.id,
+        titulo,
+        descricao,
+        requisitos: requisitos || null,
+        modalidade,
+        latitude: latitude ?? empresa.latitude ?? null,
+        longitude: longitude ?? empresa.longitude ?? null,
+        habilidades: Array.isArray(habilidades) ? habilidades : [],
+        ativo: 1,
+      });
+
+      const vagaSalva = await vagaRepository.save(novaVaga);
+
+      return res.status(201).json(vagaSalva);
     } catch (error: any) {
-      return res.status(500).json({ message: error.message });
+      return res.status(500).json({
+        message: "Erro ao criar vaga",
+        error: error.message,
+      });
     }
   }
 
-  // 2. Listar todas as vagas (Qualquer usuário logado)
   static async getAll(req: Request, res: Response) {
     try {
       const vagaRepository = AppDataSource.getRepository(Vaga);
+
       const vagas = await vagaRepository.find({
-        relations: ["empresa"] // Inclui dados da empresa que postou
+        where: { ativo: 1 },
+        relations: ["empresa", "empresa.usuario"],
+        order: { criado_em: "DESC" },
       });
-      return res.json(vagas);
+
+      return res.status(200).json(vagas);
     } catch (error: any) {
-      return res.status(500).json({ message: error.message });
+      return res.status(500).json({
+        message: "Erro ao listar vagas",
+        error: error.message,
+      });
     }
   }
 
-  // 3. Buscar vaga por ID
   static async getById(req: Request, res: Response) {
-    const { id } = req.params;
     try {
+      const { id } = req.params;
+
       const vagaRepository = AppDataSource.getRepository(Vaga);
+
       const vaga = await vagaRepository.findOne({
-        where: { id: parseInt(id) },
-        relations: ["empresa"]
+        where: { id: Number(id) },
+        relations: ["empresa", "empresa.usuario"],
       });
 
       if (!vaga) {
-        return res.status(404).json({ message: "Vaga não encontrada." });
+        return res.status(404).json({
+          message: "Vaga não encontrada.",
+        });
       }
 
-      return res.json(vaga);
+      return res.status(200).json(vaga);
     } catch (error: any) {
-      return res.status(500).json({ message: error.message });
+      return res.status(500).json({
+        message: "Erro ao buscar vaga",
+        error: error.message,
+      });
     }
   }
 
-  // 4. Editar Vaga (Regra: Empresa só edita a própria / Não edita de outra)
   static async update(req: Request, res: Response) {
-    const { id } = req.params;
-    const dadosAtualizados = req.body;
-    const usuarioLogadoId = (req as any).usuarioId;
-
     try {
-      const vagaRepository = AppDataSource.getRepository(Vaga);
-      const vaga = await vagaRepository.findOne({
-        where: { id: parseInt(id) },
-        relations: ["empresa", "empresa.usuario"]
-      });
+      const { id } = req.params;
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
 
-      if (!vaga) {
-        return res.status(404).json({ message: "Vaga não encontrada." });
-      }
-
-      // Correção TS18048: Usando Optional Chaining (?.) para acesso seguro
-      if (vaga.empresa?.usuario?.id !== usuarioLogadoId) {
-        return res.status(403).json({ 
-          message: "Acesso negado: Você não pode editar uma vaga que pertence a outra empresa." 
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        return res.status(403).json({
+          message: "Apenas empresas podem editar vagas.",
         });
       }
 
-      vagaRepository.merge(vaga, dadosAtualizados);
-      const resultado = await vagaRepository.save(vaga);
-      
-      return res.json(resultado);
+      const vagaRepository = AppDataSource.getRepository(Vaga);
+
+      const vaga = await vagaRepository.findOne({
+        where: { id: Number(id) },
+      });
+
+      if (!vaga) {
+        return res.status(404).json({
+          message: "Vaga não encontrada.",
+        });
+      }
+
+      if (vaga.empresa_id !== usuarioLogadoId) {
+        return res.status(403).json({
+          message: "Você só pode editar vagas da sua própria empresa.",
+        });
+      }
+
+      const {
+        titulo,
+        descricao,
+        requisitos,
+        modalidade,
+        latitude,
+        longitude,
+        habilidades,
+      } = req.body;
+
+      vaga.titulo = titulo ?? vaga.titulo;
+      vaga.descricao = descricao ?? vaga.descricao;
+      vaga.requisitos = requisitos ?? vaga.requisitos;
+      vaga.modalidade = modalidade ?? vaga.modalidade;
+      vaga.latitude = latitude ?? vaga.latitude;
+      vaga.longitude = longitude ?? vaga.longitude;
+      vaga.habilidades = Array.isArray(habilidades) ? habilidades : vaga.habilidades;
+
+      const vagaAtualizada = await vagaRepository.save(vaga);
+
+      return res.status(200).json(vagaAtualizada);
     } catch (error: any) {
-      return res.status(500).json({ message: error.message });
+      return res.status(500).json({
+        message: "Erro ao atualizar vaga",
+        error: error.message,
+      });
     }
   }
 
-  // 5. Deletar Vaga (Regra: Empresa só deleta a própria)
   static async delete(req: Request, res: Response) {
-    const { id } = req.params;
-    const usuarioLogadoId = (req as any).usuarioId;
-
     try {
-      const vagaRepository = AppDataSource.getRepository(Vaga);
-      const vaga = await vagaRepository.findOne({
-        where: { id: parseInt(id) },
-        relations: ["empresa", "empresa.usuario"]
-      });
+      const { id } = req.params;
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
 
-      if (!vaga) {
-        return res.status(404).json({ message: "Vaga não encontrada." });
-      }
-
-      // Correção TS18048: Usando Optional Chaining (?.) para acesso seguro
-      if (vaga.empresa?.usuario?.id !== usuarioLogadoId) {
-        return res.status(403).json({ 
-          message: "Acesso negado: Você não tem permissão para remover esta vaga." 
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        return res.status(403).json({
+          message: "Apenas empresas podem remover vagas.",
         });
       }
 
-      await vagaRepository.remove(vaga);
-      return res.status(200).json({ message: "Vaga removida com sucesso." });
+      const vagaRepository = AppDataSource.getRepository(Vaga);
+
+      const vaga = await vagaRepository.findOne({
+        where: { id: Number(id) },
+      });
+
+      if (!vaga) {
+        return res.status(404).json({
+          message: "Vaga não encontrada.",
+        });
+      }
+
+      if (vaga.empresa_id !== usuarioLogadoId) {
+        return res.status(403).json({
+          message: "Você só pode remover vagas da sua própria empresa.",
+        });
+      }
+
+      vaga.ativo = 0;
+      await vagaRepository.save(vaga);
+
+      return res.status(200).json({
+        message: "Vaga removida com sucesso.",
+      });
     } catch (error: any) {
-      return res.status(500).json({ message: error.message });
+      return res.status(500).json({
+        message: "Erro ao remover vaga",
+        error: error.message,
+      });
     }
   }
 }
