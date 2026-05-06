@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-
 interface TokenPayload {
-  id: number;
+  id?: number;
+  userId?: number;
   perfil: string;
 }
 
@@ -14,16 +14,23 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
     return res.status(401).json({ message: "Token não fornecido" });
   }
 
-  
-  const [, token] = authHeader.split(" ");
+  const [type, token] = authHeader.split(" ");
+
+  if (type !== "Bearer" || !token) {
+    return res.status(401).json({ message: "Token inválido" });
+  }
 
   try {
-    // IMPORTANTE: Use a mesma SECRET que foi usada no Login
     const secret = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
     const decoded = jwt.verify(token, secret) as TokenPayload;
 
-    
-    (req as any).usuarioId = decoded.id;
+    const usuarioId = decoded.id ?? decoded.userId;
+
+    if (!usuarioId || !decoded.perfil) {
+      return res.status(401).json({ message: "Token inválido" });
+    }
+
+    (req as any).usuarioId = usuarioId;
     (req as any).usuarioPerfil = decoded.perfil;
 
     return next();

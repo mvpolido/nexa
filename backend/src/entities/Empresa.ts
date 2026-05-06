@@ -1,18 +1,17 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
   Column,
   OneToOne,
-  OneToMany, 
-  JoinColumn
+  OneToMany,
+  JoinColumn,
 } from "typeorm";
 import { Usuario } from "./Usuario";
-import { Vaga } from "./Vaga"; 
-
+import { Vaga } from "./Vaga";
 
 @Entity("empresa")
 export class Empresa {
-  @PrimaryGeneratedColumn() // 👈 Troque @PrimaryColumn() por isso
+  @PrimaryColumn()
   id!: number;
 
   @Column({ type: "varchar", length: 14, unique: true, nullable: true })
@@ -21,17 +20,14 @@ export class Empresa {
   @Column({ type: "text", nullable: true })
   descricao?: string;
 
-  // Use 'numeric' ou 'decimal' - para o TypeORM no Postgres 'numeric' é mais comum
-  @Column({ type: "numeric", precision: 10, scale: 8, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 8, nullable: true })
   latitude?: number;
 
-  @Column({ type: "numeric", precision: 11, scale: 8, nullable: true })
+  @Column({ type: "decimal", precision: 11, scale: 8, nullable: true })
   longitude?: number;
 
-  // Se você quiser manter o vínculo 1:1, mude o nome da coluna de join para 'usuarioId'
-  // para não conflitar com o ID da própria empresa
   @OneToOne(() => Usuario, (usuario) => usuario.empresa, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "usuarioId" }) 
+  @JoinColumn({ name: "id" })
   usuario?: Usuario;
 
   @OneToMany(() => Vaga, (vaga) => vaga.empresa)
