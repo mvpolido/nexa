@@ -1,6 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'student_profile_model.dart';
+import '../models/student_profile_model.dart';
 
 class StudentApiService {
   static const String baseUrl = 'http://localhost:3000'; // Alterar para IP da máquina em produção
@@ -41,11 +41,20 @@ class StudentApiService {
         },
         body: jsonEncode({
           'nome_exibicao': profile.nomeExibicao,
+          'email': profile.email,
           'curso': profile.curso,
           'url_curriculo': profile.urlCurriculo,
           'cpf': profile.cpf,
+          'endereco': profile.endereco,
+          'logradouro': profile.logradouro,
+          'cep': profile.cep,
+          'numero': profile.numero,
+          'bairro': profile.bairro,
+          'cidade': profile.cidade,
+          'estado': profile.estado,
           'latitude': profile.latitude,
           'longitude': profile.longitude,
+          'foto_perfil': profile.fotoPerfil,
         }),
       );
 

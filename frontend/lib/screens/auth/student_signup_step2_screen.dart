@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'student_signup_step3_screen.dart';
+import '../../models/temp_registration.dart';
 
 class StudentSignupStep2Screen extends StatefulWidget {
   const StudentSignupStep2Screen({super.key});
@@ -96,7 +97,7 @@ class _StudentSignupStep2ScreenState extends State<StudentSignupStep2Screen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10)],
                   ),
                   child: ListView.builder(
                     shrinkWrap: true,
@@ -138,6 +139,7 @@ class _StudentSignupStep2ScreenState extends State<StudentSignupStep2Screen> {
 
               ElevatedButton(
                 onPressed: _selectedItems.isEmpty ? null : () {
+                  TempRegistration().skills = List<String>.from(_selectedItems);
                   Navigator.push(context, CupertinoPageRoute(builder: (context) => const StudentSignupStep3Screen()));
                 },
                 child: const Text('Próximo'),
