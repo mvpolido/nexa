@@ -10,7 +10,6 @@ import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes'; // Garanta que este arquivo existe em src/routes/
 import alunoRoutes from './routes/aluno.routes';
-import empresaRoutes from './routes/empresa.routes';
 
 const app = express();
 app.use(cors());
@@ -29,7 +28,6 @@ app.use(healthRoutes);
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes); // O prefixo /users será aplicado a todas as rotas dentro de userRoutes
 app.use('/alunos', alunoRoutes); // O prefixo /alunos será aplicado a todas as rotas dentro de alunoRoutes
-app.use('/empresas', empresaRoutes); // O prefixo /empresas será aplicado a todas as rotas dentro de empresaRoutes
 
 const startServer = async () => {
   let retries = 5;
