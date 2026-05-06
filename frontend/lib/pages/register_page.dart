@@ -195,7 +195,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    value: _perfil,
+                    initialValue: _perfil,
                     decoration: const InputDecoration(
                       labelText: 'Perfil',
                       border: OutlineInputBorder(),

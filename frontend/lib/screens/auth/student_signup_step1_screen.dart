@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'student_signup_step2_screen.dart';
+import '../../models/temp_registration.dart';
+import '../../services/validators.dart';
 
 class StudentSignupStep1Screen extends StatefulWidget {
   const StudentSignupStep1Screen({super.key});
@@ -15,6 +17,7 @@ class _StudentSignupStep1ScreenState extends State<StudentSignupStep1Screen> {
 
   // Controllers para TODOS os campos agora
   final _nomeController = TextEditingController();
+  final _emailController = TextEditingController();
   final _cpfController = TextEditingController();
   final _courseController = TextEditingController();
   final _institutionController = TextEditingController();
@@ -27,6 +30,7 @@ class _StudentSignupStep1ScreenState extends State<StudentSignupStep1Screen> {
   @override
   void dispose() {
     _nomeController.dispose();
+    _emailController.dispose();
     _cpfController.dispose();
     _courseController.dispose();
     _institutionController.dispose();
@@ -91,17 +95,38 @@ class _StudentSignupStep1ScreenState extends State<StudentSignupStep1Screen> {
                 ),
                 const SizedBox(height: 20),
 
+                const Text('Email', style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(hintText: 'seu@email.com'),
+                  validator: (value) {
+                    final email = value?.trim() ?? '';
+                    if (email.isEmpty) {
+                      return 'Por favor, informe o email';
+                    }
+                    if (!email.contains('@')) {
+                      return 'Email inválido';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+
                 const Text('CPF', style: TextStyle(fontWeight: FontWeight.w500)),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _cpfController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(hintText: 'Apenas números'),
+                  decoration: const InputDecoration(hintText: 'Apenas números (11 dígitos)'),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Por favor, informe seu CPF';
                     }
-                    // Dica de QA: No futuro você pode colocar uma validação de 11 dígitos aqui!
+                    if (!Validators.isValidCPF(value)) {
+                      return 'CPF inválido';
+                    }
                     return null;
                   },
                 ),
@@ -187,6 +212,13 @@ class _StudentSignupStep1ScreenState extends State<StudentSignupStep1Screen> {
                   onPressed: () {
                     // Valida todos os campos obrigatórios de uma vez
                     if (_formKey.currentState!.validate()) {
+                      final reg = TempRegistration();
+                      reg.nomeExibicao = _nomeController.text.trim();
+                      reg.email = _emailController.text.trim();
+                      reg.password = _passwordController.text;
+                      reg.cpf = _cpfController.text.trim();
+                      reg.institution = _institutionController.text.trim();
+                      reg.course = _courseController.text.trim();
                       Navigator.push(context, CupertinoPageRoute(builder: (context) => const StudentSignupStep2Screen()));
                     }
                   },

@@ -15,6 +15,27 @@ export class Empresa {
   @Column({ type: "varchar", length: 14, unique: true, nullable: true })
   cnpj?: string;
 
+  @Column({ type: "varchar", length: 255, nullable: true })
+  razao_social?: string;
+
+  @Column({ type: "varchar", length: 8, nullable: true })
+  cep?: string;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  logradouro?: string;
+
+  @Column({ type: "varchar", length: 20, nullable: true })
+  numero?: string;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  bairro?: string;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  cidade?: string;
+
+  @Column({ type: "varchar", length: 2, nullable: true })
+  estado?: string;
+
   @Column({ type: "text", nullable: true })
   descricao?: string;
 
