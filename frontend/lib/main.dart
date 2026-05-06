@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/auth/auth_selection_screen.dart';
+import 'screens/student_profile_screen.dart';
 
 void main() {
   runApp(const NexaApp());
@@ -51,6 +52,10 @@ class NexaApp extends StatelessWidget {
         ),
       ),
       home: const AuthSelectionScreen(),
+      routes: {
+        '/auth': (context) => const AuthSelectionScreen(),
+        '/profile': (context) => const StudentProfileScreen(),
+      },
     );
   }
 }
