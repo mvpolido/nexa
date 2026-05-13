@@ -45,25 +45,26 @@ class _LoginPageState extends State<LoginPage> {
         },
         body: jsonEncode({
           'email': _emailController.text.trim(),
-          'password': _passwordController.text,
+          'senha': _passwordController.text,
         }),
       );
 
-      final data = jsonDecode(response.body);
+      final data = response.body.isNotEmpty ? jsonDecode(response.body) : {};
 
       if (response.statusCode == 200) {
         final prefs = await SharedPreferences.getInstance();
+
         await prefs.setString('token', data['token']);
+        await prefs.setString('user_id', data['user']['id'].toString());
+        await prefs.setString('user_nome', data['user']['nome_exibicao']);
+        await prefs.setString('user_email', data['user']['email']);
+        await prefs.setString('user_perfil', data['user']['perfil']);
 
         if (!mounted) return;
 
         setState(() {
           _isLoading = false;
         });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Login realizado com sucesso')),
-        );
 
         Navigator.of(context).pushReplacementNamed('/home');
       } else {

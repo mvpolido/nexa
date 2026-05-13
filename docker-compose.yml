@@ -33,6 +33,7 @@ services:
     volumes:
       - ./backend:/app             # 👈 O Túnel: conecta seu Linux Mint ao Container
       - /app/node_modules          # 👈 Mantém as bibliotecas isoladas
+      - ./backend/uploads:/app/uploads # 👈 Isso garante que o PDF apareça na sua pasta local
     command: npx ts-node-dev --respawn --transpile-only src/index.ts # 👈 Faz atualizar ao salvar
 
   frontend:  

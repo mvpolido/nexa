@@ -1,185 +1,131 @@
-import { Response } from "express";
+import { Request, Response } from "express";
+import { In } from "typeorm";
 import { AppDataSource } from "../data-source";
 import { Aluno } from "../entities/Aluno";
-import { Usuario } from "../entities/Usuario";
-import { AuthRequest } from "../middleware/auth";
+import { AlunoHabilidade } from "../entities/AlunoHabilidade";
+import { Habilidade } from "../entities/Habilidade";
+import { UsuarioPerfil } from "../entities/Usuario";
 
 export class AlunoController {
-  // GET /alunos/me - Buscar perfil do aluno logado
-  static async getMe(req: AuthRequest, res: Response) {
+  static async meuPerfil(req: Request, res: Response) {
     try {
-      const userId = req.userId;
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
 
-      if (!userId) {
-        return res.status(401).json({
-          message: "Usuário não autenticado",
+      if (perfilLogado !== UsuarioPerfil.ALUNO) {
+        return res.status(403).json({
+          message: "Apenas alunos podem acessar este recurso.",
         });
       }
 
-      const usuarioRepository = AppDataSource.getRepository(Usuario);
       const alunoRepository = AppDataSource.getRepository(Aluno);
 
-      const usuario = await usuarioRepository.findOne({
-        where: { id: userId },
-      });
-
-      if (!usuario) {
-        return res.status(404).json({
-          message: "Usuário não encontrado",
-        });
-      }
-
       const aluno = await alunoRepository.findOne({
-        where: { id: userId },
+        where: { id: usuarioLogadoId },
+        relations: [
+          "usuario",
+          "alunoHabilidades",
+          "alunoHabilidades.habilidade",
+        ],
       });
 
       if (!aluno) {
         return res.status(404).json({
-          message: "Perfil do aluno não encontrado",
+          message: "Perfil de aluno não encontrado.",
         });
       }
 
-      return res.status(200).json({
-        id: usuario.id,
-        nome_exibicao: usuario.nome_exibicao,
-        email: usuario.email,
-        criado_em: usuario.criado_em,
-        atualizado_em: usuario.atualizado_em,
-        aluno: {
-          cpf: aluno.cpf,
-          curso: aluno.curso,
-          url_curriculo: aluno.url_curriculo,
-          latitude: aluno.latitude,
-          longitude: aluno.longitude,
-        },
-      });
+      return res.status(200).json(aluno);
     } catch (error: any) {
       return res.status(500).json({
-        message: "Erro ao buscar perfil",
+        message: "Erro ao buscar perfil do aluno.",
         error: error.message,
       });
     }
   }
 
-  // PUT /alunos/me - Atualizar perfil do aluno logado
-  static async updateMe(req: AuthRequest, res: Response) {
+  static async atualizarHabilidades(req: Request, res: Response) {
     try {
-      const userId = req.userId;
-      const { nome_exibicao, curso, url_curriculo, cpf, latitude, longitude } =
-        req.body;
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+      const { habilidadeIds } = req.body;
 
-      if (!userId) {
-        return res.status(401).json({
-          message: "Usuário não autenticado",
+      if (perfilLogado !== UsuarioPerfil.ALUNO) {
+        return res.status(403).json({
+          message: "Apenas alunos podem alterar habilidades.",
         });
       }
 
-      const usuarioRepository = AppDataSource.getRepository(Usuario);
+      if (!Array.isArray(habilidadeIds)) {
+        return res.status(400).json({
+          message: "O campo habilidadeIds deve ser um array de IDs.",
+        });
+      }
+
+      const ids = habilidadeIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+
+      const idsUnicos = Array.from(new Set(ids));
+
       const alunoRepository = AppDataSource.getRepository(Aluno);
-
-      const usuario = await usuarioRepository.findOne({
-        where: { id: userId },
-      });
-
-      if (!usuario) {
-        return res.status(404).json({
-          message: "Usuário não encontrado",
-        });
-      }
-
-      let aluno = await alunoRepository.findOne({
-        where: { id: userId },
-      });
-
-      if (!aluno) {
-        return res.status(404).json({
-          message: "Perfil do aluno não encontrado",
-        });
-      }
-
-      // Atualizar dados do usuário
-      if (nome_exibicao) {
-        usuario.nome_exibicao = nome_exibicao;
-      }
-
-      await usuarioRepository.save(usuario);
-
-      // Atualizar dados do aluno
-      if (curso) aluno.curso = curso;
-      if (url_curriculo) aluno.url_curriculo = url_curriculo;
-      if (cpf) aluno.cpf = cpf;
-      if (latitude !== undefined) aluno.latitude = latitude;
-      if (longitude !== undefined) aluno.longitude = longitude;
-
-      aluno = await alunoRepository.save(aluno);
-
-      return res.status(200).json({
-        message: "Perfil atualizado com sucesso",
-        data: {
-          id: usuario.id,
-          nome_exibicao: usuario.nome_exibicao,
-          email: usuario.email,
-          atualizado_em: usuario.atualizado_em,
-          aluno: {
-            cpf: aluno.cpf,
-            curso: aluno.curso,
-            url_curriculo: aluno.url_curriculo,
-            latitude: aluno.latitude,
-            longitude: aluno.longitude,
-          },
-        },
-      });
-    } catch (error: any) {
-      return res.status(500).json({
-        message: "Erro ao atualizar perfil",
-        error: error.message,
-      });
-    }
-  }
-
-  // GET /alunos/:id - Buscar perfil de um aluno específico
-  static async getById(req: AuthRequest, res: Response) {
-    try {
-      const { id } = req.params;
-
-      const usuarioRepository = AppDataSource.getRepository(Usuario);
-      const alunoRepository = AppDataSource.getRepository(Aluno);
-
-      const usuario = await usuarioRepository.findOne({
-        where: { id: parseInt(id) },
-      });
-
-      if (!usuario) {
-        return res.status(404).json({
-          message: "Usuário não encontrado",
-        });
-      }
+      const habilidadeRepository = AppDataSource.getRepository(Habilidade);
+      const alunoHabilidadeRepository =
+        AppDataSource.getRepository(AlunoHabilidade);
 
       const aluno = await alunoRepository.findOne({
-        where: { id: parseInt(id) },
+        where: { id: usuarioLogadoId },
       });
 
       if (!aluno) {
         return res.status(404).json({
-          message: "Perfil do aluno não encontrado",
+          message: "Perfil de aluno não encontrado.",
         });
       }
 
+      const habilidades = idsUnicos.length
+        ? await habilidadeRepository.find({
+            where: { id: In(idsUnicos) },
+          })
+        : [];
+
+      if (habilidades.length !== idsUnicos.length) {
+        return res.status(400).json({
+          message: "Uma ou mais habilidades informadas não existem.",
+        });
+      }
+
+      await alunoHabilidadeRepository.delete({
+        aluno_id: aluno.id,
+      });
+
+      if (idsUnicos.length > 0) {
+        const novasRelacoes = idsUnicos.map((habilidadeId) =>
+          alunoHabilidadeRepository.create({
+            aluno_id: aluno.id,
+            habilidade_id: habilidadeId,
+          })
+        );
+
+        await alunoHabilidadeRepository.save(novasRelacoes);
+      }
+
+      const alunoAtualizado = await alunoRepository.findOne({
+        where: { id: aluno.id },
+        relations: [
+          "usuario",
+          "alunoHabilidades",
+          "alunoHabilidades.habilidade",
+        ],
+      });
+
       return res.status(200).json({
-        id: usuario.id,
-        nome_exibicao: usuario.nome_exibicao,
-        email: usuario.email,
-        aluno: {
-          cpf: aluno.cpf,
-          curso: aluno.curso,
-          url_curriculo: aluno.url_curriculo,
-          latitude: aluno.latitude,
-          longitude: aluno.longitude,
-        },
+        message: "Habilidades do aluno atualizadas com sucesso.",
+        aluno: alunoAtualizado,
       });
     } catch (error: any) {
       return res.status(500).json({
-        message: "Erro ao buscar perfil",
+        message: "Erro ao atualizar habilidades do aluno.",
         error: error.message,
       });
     }

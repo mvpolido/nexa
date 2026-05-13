@@ -3,9 +3,11 @@ import {
   PrimaryColumn,
   Column,
   OneToOne,
+  OneToMany,
   JoinColumn
 } from "typeorm";
 import { Usuario } from "./Usuario";
+import { AlunoHabilidade } from "./AlunoHabilidade";
 
 @Entity("aluno")
 export class Aluno {
@@ -31,4 +33,8 @@ export class Aluno {
   @OneToOne(() => Usuario, usuario => usuario.aluno, { onDelete: "CASCADE" })
   @JoinColumn({ name: "id" })
   usuario?: Usuario;
+
+  // Relacionamento N:M com Habilidade (via tabela intermediária)
+  @OneToMany(() => AlunoHabilidade, ah => ah.aluno)
+  alunoHabilidades?: AlunoHabilidade[];
 }

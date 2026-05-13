@@ -1,14 +1,15 @@
 import { Router } from "express";
 import { AlunoController } from "../controllers/AlunoController";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware } from "../middlewares/authMiddleware";
 
 const router = Router();
 
-// Rotas protegidas (requerem autenticação)
-router.get("/me", authMiddleware, AlunoController.getMe);
-router.put("/me", authMiddleware, AlunoController.updateMe);
+router.get("/me", authMiddleware, AlunoController.meuPerfil);
 
-// Rota pública (buscar perfil de outro aluno)
-router.get("/:id", AlunoController.getById);
+router.put(
+  "/me/habilidades",
+  authMiddleware,
+  AlunoController.atualizarHabilidades
+);
 
 export default router;

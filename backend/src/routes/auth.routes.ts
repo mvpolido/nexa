@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { Router } from "express";
 import bcrypt from "bcrypt";
+import { cpf as cpfValidator, cnpj as cnpjValidator } from "cpf-cnpj-validator";
 import { AppDataSource } from "../data-source";
 import { Usuario, UsuarioPerfil } from "../entities/Usuario";
 import { Aluno } from "../entities/Aluno";
@@ -8,11 +9,27 @@ import { Empresa } from "../entities/Empresa";
 
 const router = Router();
 
+function onlyNumbers(value: string | undefined): string {
+  return (value || "").replace(/\D/g, "");
+}
+
 router.post("/register", async (req, res) => {
   try {
-    const { nome_exibicao, email, password, perfil } = req.body;
+    const {
+      nome_exibicao,
+      email,
+      perfil,
+      cpf,
+      cnpj,
+      curso,
+      descricao,
+      latitude,
+      longitude,
+    } = req.body;
 
-    if (!nome_exibicao || !email || !password || !perfil) {
+    const senha = req.body.senha ?? req.body.password;
+
+    if (!nome_exibicao || !email || !senha || !perfil) {
       return res.status(400).json({
         message: "Campos obrigatórios faltando",
       });
@@ -38,7 +55,58 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    const senhaHash = await bcrypt.hash(password, 10);
+    const cpfLimpo = onlyNumbers(cpf);
+    const cnpjLimpo = onlyNumbers(cnpj);
+
+    if (perfil === UsuarioPerfil.ALUNO) {
+      if (!cpfLimpo) {
+        return res.status(400).json({
+          message: "CPF é obrigatório para cadastro de aluno",
+        });
+      }
+
+      if (!cpfValidator.isValid(cpfLimpo)) {
+        return res.status(400).json({
+          message: "CPF inválido",
+        });
+      }
+
+      const alunoComCpf = await alunoRepository.findOne({
+        where: { cpf: cpfLimpo },
+      });
+
+      if (alunoComCpf) {
+        return res.status(409).json({
+          message: "CPF já cadastrado",
+        });
+      }
+    }
+
+    if (perfil === UsuarioPerfil.EMPRESA) {
+      if (!cnpjLimpo) {
+        return res.status(400).json({
+          message: "CNPJ é obrigatório para cadastro de empresa",
+        });
+      }
+
+      if (!cnpjValidator.isValid(cnpjLimpo)) {
+        return res.status(400).json({
+          message: "CNPJ inválido",
+        });
+      }
+
+      const empresaComCnpj = await empresaRepository.findOne({
+        where: { cnpj: cnpjLimpo },
+      });
+
+      if (empresaComCnpj) {
+        return res.status(409).json({
+          message: "CNPJ já cadastrado",
+        });
+      }
+    }
+
+    const senhaHash = await bcrypt.hash(senha, 10);
 
     const novoUsuario = usuarioRepository.create({
       nome_exibicao,
@@ -52,14 +120,24 @@ router.post("/register", async (req, res) => {
     if (perfil === UsuarioPerfil.ALUNO) {
       const aluno = alunoRepository.create({
         id: usuarioSalvo.id,
+        cpf: cpfLimpo,
+        curso: curso || null,
+        latitude: latitude ?? null,
+        longitude: longitude ?? null,
       });
+
       await alunoRepository.save(aluno);
     }
 
     if (perfil === UsuarioPerfil.EMPRESA) {
       const empresa = empresaRepository.create({
         id: usuarioSalvo.id,
+        cnpj: cnpjLimpo,
+        descricao: descricao || null,
+        latitude: latitude ?? null,
+        longitude: longitude ?? null,
       });
+
       await empresaRepository.save(empresa);
     }
 
@@ -81,9 +159,10 @@ router.post("/register", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email } = req.body;
+    const senha = req.body.senha ?? req.body.password;
 
-    if (!email || !password) {
+    if (!email || !senha) {
       return res.status(400).json({
         message: "Campos obrigatórios faltando",
       });
@@ -103,7 +182,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const senhaCorreta = await bcrypt.compare(password, usuario.senha_hash);
+    const senhaCorreta = await bcrypt.compare(senha, usuario.senha_hash);
 
     if (!senhaCorreta) {
       return res.status(401).json({
@@ -111,24 +190,27 @@ router.post("/login", async (req, res) => {
       });
     }
 
-  const token = jwt.sign(
-    {
-      userId: usuario.id,
-      perfil: usuario.perfil,
-    },
-    process.env.JWT_SECRET || "default_secret",
-    { expiresIn: "1d" }
-  );
+    const secret = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
 
-  return res.status(200).json({
-    token: token,
-    user: {
-      id: usuario.id,
-      nome_exibicao: usuario.nome_exibicao,
-      email: usuario.email,
-      perfil: usuario.perfil,
-    },
-  });
+    const token = jwt.sign(
+      {
+        id: usuario.id,
+        userId: usuario.id,
+        perfil: usuario.perfil,
+      },
+      secret,
+      { expiresIn: "1d" }
+    );
+
+    return res.status(200).json({
+      token,
+      user: {
+        id: usuario.id,
+        nome_exibicao: usuario.nome_exibicao,
+        email: usuario.email,
+        perfil: usuario.perfil,
+      },
+    });
   } catch (error: any) {
     return res.status(500).json({
       message: "Erro interno no servidor",

@@ -2,18 +2,28 @@ import cors from "cors";
 import "reflect-metadata";
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
+import path from "path"; // 👈 1. Importação necessária para lidar com caminhos
 import { AppDataSource } from "./data-source";
 import { swaggerSpec } from './swagger';
 
 // Importação das rotas
 import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
-import userRoutes from './routes/user.routes'; // Garanta que este arquivo existe em src/routes/
-import alunoRoutes from './routes/aluno.routes';
+import userRoutes from './routes/user.routes'; 
+import vagaRoutes from './routes/vaga.routes';
+import habilidadeRoutes from './routes/habilidade.routes';
+import { empresaRoutes } from './routes/empresa.routes';
+import candidaturaRoutes from './routes/candidatura.routes';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// 👈 2. Configuração para servir arquivos estáticos
+// Agora, qualquer arquivo em /uploads será acessível via http://localhost:3000/files
+app.use('/files', express.static(path.resolve(__dirname, '..', 'uploads')));
+
+app.use('/empresas', empresaRoutes);
 
 // Rota raiz para teste rápido de vida da API
 app.get('/', (req, res) => {
@@ -26,8 +36,10 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // Aplicação das rotas
 app.use(healthRoutes);
 app.use('/auth', authRoutes);
-app.use('/users', userRoutes); // O prefixo /users será aplicado a todas as rotas dentro de userRoutes
-app.use('/alunos', alunoRoutes); // O prefixo /alunos será aplicado a todas as rotas dentro de alunoRoutes
+app.use('/users', userRoutes); 
+app.use('/vagas', vagaRoutes);
+app.use('/habilidades', habilidadeRoutes);
+app.use(candidaturaRoutes);
 
 const startServer = async () => {
   let retries = 5;
@@ -45,6 +57,7 @@ const startServer = async () => {
     } catch (error) {
       retries--;
       console.error(`❌ Erro na conexão com o banco. Tentativas restantes: ${retries}`);
+      // console.error("Detalhe do erro:", error); // Removido o excesso de log se quiser limpar o terminal
       if (retries === 0) {
         console.error("FALHA CRÍTICA: Não foi possível conectar ao banco de dados.");
         process.exit(1);

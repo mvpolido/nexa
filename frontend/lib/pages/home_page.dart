@@ -1,62 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'login_page.dart';
 
-class HomePage extends StatelessWidget {
+import 'company_dashboard_page.dart';
+import 'login_page.dart';
+import 'student_jobs_page.dart';
+
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
-  Future<void> _logout(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
-    await prefs.remove('user_nome');
-    await prefs.remove('user_email');
-    await prefs.remove('user_perfil');
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
 
-    if (!context.mounted) return;
+class _HomePageState extends State<HomePage> {
+  bool _isLoading = true;
+  String? _perfil;
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-    );
+  @override
+  void initState() {
+    super.initState();
+    _loadSession();
   }
 
-  Future<bool> _hasToken() async {
+  Future<void> _loadSession() async {
     final prefs = await SharedPreferences.getInstance();
+
     final token = prefs.getString('token');
-    return token != null && token.isNotEmpty;
+    final perfil = prefs.getString('user_perfil');
+
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+
+      return;
+    }
+
+    setState(() {
+      _perfil = perfil;
+      _isLoading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _hasToken(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-        final hasToken = snapshot.data ?? false;
+    if (_perfil == 'empresa') {
+      return CompanyDashboardPage();
+    }
 
-        if (!hasToken) {
-          return const LoginPage();
-        }
-
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Nexa'),
-            actions: [
-              IconButton(
-                onPressed: () => _logout(context),
-                icon: const Icon(Icons.logout),
-              ),
-            ],
-          ),
-          body: const Center(
-            child: Text('Você está logado'),
-          ),
-        );
-      },
-    );
+    return StudentJobsPage();
   }
 }
