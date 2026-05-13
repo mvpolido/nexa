@@ -369,6 +369,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         style: TextStyle(fontStyle: FontStyle.italic),
       );
     }
+  }
 
     return Wrap(
       spacing: 8,

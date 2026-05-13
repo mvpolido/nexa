@@ -3,6 +3,7 @@ import { AppDataSource } from "../data-source";
 import { Candidatura, CandidaturaStatus } from "../entities/Candidatura";
 import { Vaga } from "../entities/Vaga";
 import { Aluno } from "../entities/Aluno";
+import { Empresa } from "../entities/Empresa";
 import { UsuarioPerfil } from "../entities/Usuario";
 
 export class CandidaturaController {
@@ -29,7 +30,7 @@ export class CandidaturaController {
       const candidaturaRepository = AppDataSource.getRepository(Candidatura);
 
       const aluno = await alunoRepository.findOne({
-        where: { id: usuarioLogadoId },
+        where: { usuario: { id: usuarioLogadoId } }, 
       });
 
       if (!aluno) {
@@ -50,8 +51,8 @@ export class CandidaturaController {
 
       const candidaturaExistente = await candidaturaRepository.findOne({
         where: {
-          aluno_id: aluno.id,
-          vaga_id: vaga.id,
+          aluno: { id: aluno.id },
+          vaga: { id: vaga.id },
         },
       });
 
@@ -93,13 +94,22 @@ export class CandidaturaController {
         });
       }
 
+      const alunoRepository = AppDataSource.getRepository(Aluno);
       const candidaturaRepository = AppDataSource.getRepository(Candidatura);
+
+      const aluno = await alunoRepository.findOne({
+        where: { usuario: { id: usuarioLogadoId } },
+      });
+
+      if (!aluno) {
+        return res.status(404).json({ message: "Perfil de aluno não encontrado." });
+      }
 
       const candidaturas = await candidaturaRepository.find({
         where: {
-          aluno_id: usuarioLogadoId,
+          aluno: { id: aluno.id },
         },
-        relations: ["vaga", "vaga.empresa", "vaga.empresa.usuario"],
+        relations: ["vaga", "vaga.empresa"],
         order: {
           data_candidatura: "DESC",
         },
@@ -126,8 +136,17 @@ export class CandidaturaController {
         });
       }
 
+      const empresaRepository = AppDataSource.getRepository(Empresa);
       const vagaRepository = AppDataSource.getRepository(Vaga);
       const candidaturaRepository = AppDataSource.getRepository(Candidatura);
+
+      const empresa = await empresaRepository.findOne({
+        where: { usuario: { id: usuarioLogadoId } },
+      });
+
+      if (!empresa) {
+        return res.status(404).json({ message: "Perfil de empresa não encontrado." });
+      }
 
       const vaga = await vagaRepository.findOne({
         where: { id: vagaId },
@@ -139,7 +158,7 @@ export class CandidaturaController {
         });
       }
 
-      if (vaga.empresa_id !== usuarioLogadoId) {
+      if (vaga.empresa_id !== empresa.id) {
         return res.status(403).json({
           message: "Você só pode visualizar candidaturas das suas próprias vagas.",
         });
@@ -147,7 +166,7 @@ export class CandidaturaController {
 
       const candidaturas = await candidaturaRepository.find({
         where: {
-          vaga_id: vagaId,
+          vaga: { id: vagaId },
         },
         relations: ["aluno", "aluno.usuario"],
         order: {
@@ -163,6 +182,7 @@ export class CandidaturaController {
       });
     }
   }
+
   static async atualizarStatus(req: Request, res: Response) {
     try {
       const usuarioLogadoId = (req as any).usuarioId;
@@ -206,6 +226,7 @@ export class CandidaturaController {
         });
       }
 
+      // Valida se a empresa logada é a dona da vaga
       if (candidatura.vaga.empresa_id !== usuarioLogadoId) {
         return res.status(403).json({
           message:
