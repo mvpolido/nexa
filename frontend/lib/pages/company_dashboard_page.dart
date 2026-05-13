@@ -518,54 +518,206 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       );
     }
   }
+    String labelStatusCandidatura(String status) {
+        switch (status) {
+            case 'PENDENTE':
+            return 'Pendente';
+            case 'ACEITA':
+            return 'Aceita';
+            case 'REJEITADA':
+            return 'Rejeitada';
+            default:
+            return status;
+        }
+    }
 
-  void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
+    IconData iconeStatusCandidatura(String status) {
+        switch (status) {
+            case 'PENDENTE':
+            return Icons.hourglass_empty;
+            case 'ACEITA':
+            return Icons.check_circle_outline;
+            case 'REJEITADA':
+            return Icons.cancel_outlined;
+            default:
+            return Icons.info_outline;
+        }
+    }
+
+    Future<bool> atualizarStatusCandidatura({
+        required int candidaturaId,
+        required String novoStatus,
+        }) async {
+        try {
+            final response = await http.patch(
+            Uri.parse('${ApiConfig.baseUrl}/candidaturas/$candidaturaId/status'),
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+                'status': novoStatus,
+            }),
+            );
+
+            if (!mounted) return false;
+
+            if (response.statusCode == 200) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                content: Text('Status da candidatura atualizado com sucesso.'),
+                ),
+            );
+
+            return true;
+            }
+
+            String mensagem = 'Erro ao atualizar status da candidatura.';
+
+            if (response.body.isNotEmpty) {
+            final data = jsonDecode(response.body);
+            mensagem = data['message'] ?? mensagem;
+            }
+
+            ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(mensagem)),
+            );
+
+            return false;
+        } catch (_) {
+            if (!mounted) return false;
+
+            ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro de conexão com o servidor.')),
+            );
+
+            return false;
+        }
+    }
+
+    void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
+    final List<dynamic> candidaturasDialog = List<dynamic>.from(candidaturas);
+
     showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Candidatos - ${vaga['titulo'] ?? 'Vaga'}'),
-          content: SizedBox(
-            width: 620,
-            child: candidaturas.isEmpty
-                ? const Text('Nenhum candidato encontrado para esta vaga.')
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: candidaturas.length,
-                    separatorBuilder: (_, __) => const Divider(),
-                    itemBuilder: (context, index) {
-                      final candidatura = candidaturas[index];
-                      final aluno = candidatura['aluno'];
-                      final usuario = aluno?['usuario'];
+        context: context,
+        builder: (dialogContext) {
+        return StatefulBuilder(
+            builder: (context, setDialogState) {
+            return AlertDialog(
+                title: Text('Candidatos - ${vaga['titulo'] ?? 'Vaga'}'),
+                content: SizedBox(
+                width: 760,
+                child: candidaturasDialog.isEmpty
+                    ? const Text('Nenhum candidato encontrado para esta vaga.')
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: candidaturasDialog.length,
+                        separatorBuilder: (_, __) => const Divider(),
+                        itemBuilder: (context, index) {
+                            final candidatura = candidaturasDialog[index];
+                            final aluno = candidatura['aluno'];
+                            final usuario = aluno?['usuario'];
 
-                      final nomeAluno = usuario?['nome_exibicao'] ??
-                          usuario?['nome'] ??
-                          'Aluno sem nome';
+                            final candidaturaId = candidatura['id'];
 
-                      final curso = aluno?['curso'] ?? 'Curso não informado';
-                      final status = candidatura['status'] ?? '-';
+                            final nomeAluno = usuario?['nome_exibicao'] ??
+                                usuario?['nome'] ??
+                                'Aluno sem nome';
 
-                      return ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.person),
+                            final curso = aluno?['curso'] ?? 'Curso não informado';
+                            final statusAtual =
+                                candidatura['status']?.toString() ?? 'PENDENTE';
+
+                            return ListTile(
+                            leading: CircleAvatar(
+                                child: Icon(iconeStatusCandidatura(statusAtual)),
+                            ),
+                            title: Text(nomeAluno),
+                            subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                    Text('Curso: $curso'),
+                                    const SizedBox(height: 6),
+                                    Chip(
+                                    avatar: Icon(
+                                        iconeStatusCandidatura(statusAtual),
+                                        size: 18,
+                                    ),
+                                    label: Text(
+                                        labelStatusCandidatura(statusAtual),
+                                    ),
+                                    ),
+                                ],
+                                ),
+                            ),
+                            trailing: SizedBox(
+                                width: 170,
+                                child: DropdownButtonFormField<String>(
+                                value: ['PENDENTE', 'ACEITA', 'REJEITADA']
+                                        .contains(statusAtual)
+                                    ? statusAtual
+                                    : 'PENDENTE',
+                                decoration: const InputDecoration(
+                                    labelText: 'Status',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                ),
+                                items: const [
+                                    DropdownMenuItem(
+                                    value: 'PENDENTE',
+                                    child: Text('Pendente'),
+                                    ),
+                                    DropdownMenuItem(
+                                    value: 'ACEITA',
+                                    child: Text('Aceita'),
+                                    ),
+                                    DropdownMenuItem(
+                                    value: 'REJEITADA',
+                                    child: Text('Rejeitada'),
+                                    ),
+                                ],
+                                onChanged: candidaturaId == null
+                                    ? null
+                                    : (novoStatus) async {
+                                        if (novoStatus == null ||
+                                            novoStatus == statusAtual) {
+                                            return;
+                                        }
+
+                                        final sucesso =
+                                            await atualizarStatusCandidatura(
+                                            candidaturaId: candidaturaId,
+                                            novoStatus: novoStatus,
+                                        );
+
+                                        if (!sucesso) return;
+
+                                        setDialogState(() {
+                                            candidaturasDialog[index]['status'] =
+                                                novoStatus;
+                                        });
+                                        },
+                                ),
+                            ),
+                            isThreeLine: true,
+                            );
+                        },
                         ),
-                        title: Text(nomeAluno),
-                        subtitle: Text('Curso: $curso\nStatus: $status'),
-                        isThreeLine: true,
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Fechar'),
-            ),
-          ],
+                ),
+                actions: [
+                TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Fechar'),
+                ),
+                ],
+            );
+            },
         );
-      },
+        },
     );
-  }
+    }
 
   Widget cardVaga(dynamic vaga) {
     final bool arquivada = vagaArquivada(vaga);

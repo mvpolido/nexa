@@ -164,4 +164,70 @@ export class CandidaturaController {
       });
     }
   }
+  static async atualizarStatus(req: Request, res: Response) {
+    try {
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+      const candidaturaId = Number(req.params.id);
+      const { status } = req.body;
+
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        return res.status(403).json({
+          message: "Apenas empresas podem alterar status de candidaturas.",
+        });
+      }
+
+      if (!candidaturaId || Number.isNaN(candidaturaId)) {
+        return res.status(400).json({
+          message: "ID da candidatura inválido.",
+        });
+      }
+
+      const statusPermitidos = Object.values(CandidaturaStatus);
+
+      if (!status || !statusPermitidos.includes(status)) {
+        return res.status(400).json({
+          message: "Status inválido.",
+          statusPermitidos,
+        });
+      }
+
+      const candidaturaRepository = AppDataSource.getRepository(Candidatura);
+
+      const candidatura = await candidaturaRepository.findOne({
+        where: {
+          id: candidaturaId,
+        },
+        relations: ["vaga", "aluno", "aluno.usuario"],
+      });
+
+      if (!candidatura) {
+        return res.status(404).json({
+          message: "Candidatura não encontrada.",
+        });
+      }
+
+      if (candidatura.vaga.empresa_id !== usuarioLogadoId) {
+        return res.status(403).json({
+          message:
+            "Você só pode alterar candidaturas de vagas da sua própria empresa.",
+        });
+      }
+
+      candidatura.status = status;
+
+      const candidaturaAtualizada =
+        await candidaturaRepository.save(candidatura);
+
+      return res.status(200).json({
+        message: "Status da candidatura atualizado com sucesso.",
+        candidatura: candidaturaAtualizada,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao atualizar status da candidatura.",
+        error: error.message,
+      });
+    }
+  }
 }

@@ -19,7 +19,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   String? nome;
 
   List<dynamic> vagas = [];
-  Set<int> vagasCandidatadas = {};
+  Map<int, String> statusCandidaturasPorVaga = {};
 
   @override
   void initState() {
@@ -73,26 +73,31 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     }
     }
 
-  Future<void> carregarMinhasCandidaturas() async {
+    Future<void> carregarMinhasCandidaturas() async {
     final response = await http.get(
-      Uri.parse('${ApiConfig.baseUrl}/alunos/me/candidaturas'),
-      headers: {
+        Uri.parse('${ApiConfig.baseUrl}/alunos/me/candidaturas'),
+        headers: {
         'Authorization': 'Bearer $token',
-      },
+        },
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+        final data = jsonDecode(response.body);
 
-      if (data is List) {
-        vagasCandidatadas = data
-            .where((candidatura) => candidatura['vaga_id'] != null)
-            .map<int>((candidatura) => candidatura['vaga_id'] as int)
-            .toSet();
-      }
+        if (data is List) {
+        statusCandidaturasPorVaga = {};
+
+        for (final candidatura in data) {
+            final vagaId = candidatura['vaga_id'];
+            final status = candidatura['status'];
+
+            if (vagaId != null && status != null) {
+            statusCandidaturasPorVaga[vagaId as int] = status.toString();
+            }
+        }
+        }
     }
-  }
-
+    }
   Future<void> confirmarCandidatura(dynamic vaga) async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -140,8 +145,8 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       if (!mounted) return;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        setState(() {
-          vagasCandidatadas.add(vagaId);
+            setState(() {
+            statusCandidaturasPorVaga[vagaId] = 'PENDENTE';
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -181,10 +186,52 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     return usuario['nome_exibicao'] ?? usuario['nome'] ?? 'Empresa não informada';
   }
 
-  Widget cardVaga(dynamic vaga) {
+
+  String labelStatusCandidatura(String status) {
+    switch (status) {
+        case 'PENDENTE':
+        return 'Em análise';
+        case 'ACEITA':
+        return 'Aceita';
+        case 'REJEITADA':
+        return 'Rejeitada';
+        default:
+        return status;
+    }
+    }
+
+    IconData iconeStatusCandidatura(String status) {
+    switch (status) {
+        case 'PENDENTE':
+        return Icons.hourglass_empty;
+        case 'ACEITA':
+        return Icons.check_circle_outline;
+        case 'REJEITADA':
+        return Icons.cancel_outlined;
+        default:
+        return Icons.info_outline;
+    }
+    }
+
+    Color? corStatusCandidatura(String status) {
+    switch (status) {
+        case 'PENDENTE':
+        return Colors.orange.shade100;
+        case 'ACEITA':
+        return Colors.green.shade100;
+        case 'REJEITADA':
+        return Colors.red.shade100;
+        default:
+        return null;
+    }
+    }
+
+    Widget cardVaga(dynamic vaga) {
     final int? vagaId = vaga['id'];
-    final bool jaCandidatou =
-        vagaId != null && vagasCandidatadas.contains(vagaId);
+    final String? statusCandidatura =
+        vagaId != null ? statusCandidaturasPorVaga[vagaId] : null;
+
+    final bool jaCandidatou = statusCandidatura != null;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -226,18 +273,23 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
             ],
             const SizedBox(height: 16),
             Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                onPressed: jaCandidatou || vagaId == null
-                    ? null
-                    : () => confirmarCandidatura(vaga),
-                icon: Icon(
-                  jaCandidatou ? Icons.check_circle : Icons.send,
-                ),
-                label: Text(
-                  jaCandidatou ? 'Candidatura enviada' : 'Candidatar-se',
-                ),
-              ),
+            alignment: Alignment.centerRight,
+            child: jaCandidatou
+                ? Chip(
+                    avatar: Icon(
+                        iconeStatusCandidatura(statusCandidatura),
+                        size: 18,
+                    ),
+                    label: Text(
+                        'Status: ${labelStatusCandidatura(statusCandidatura)}',
+                    ),
+                    backgroundColor: corStatusCandidatura(statusCandidatura),
+                    )
+                : ElevatedButton.icon(
+                    onPressed: vagaId == null ? null : () => confirmarCandidatura(vaga),
+                    icon: const Icon(Icons.send),
+                    label: const Text('Candidatar-se'),
+                    ),
             ),
           ],
         ),
