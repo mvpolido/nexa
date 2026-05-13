@@ -34,9 +34,9 @@ async function runSeed() {
     console.log("\n📝 Criando usuários de teste...");
 
     const aluno1 = new Usuario();
-    aluno1.email = "joao@example.com";
-    aluno1.senha_hash = "hashed_password_1";
-    aluno1.nome_exibicao = "João Silva";
+    aluno1.email = "aluno@gmail.com";
+    aluno1.senha_hash = "123456";
+    aluno1.nome_exibicao = "Aluno Silva";
     aluno1.perfil = UsuarioPerfil.ALUNO;
     await usuarioRepository.save(aluno1);
     console.log(`✓ Aluno criado: ${aluno1.email}`);
@@ -50,8 +50,8 @@ async function runSeed() {
     console.log(`✓ Aluno criado: ${aluno2.email}`);
 
     const empresa1User = new Usuario();
-    empresa1User.email = "rh@techcorp.com";
-    empresa1User.senha_hash = "hashed_password_3";
+    empresa1User.email = "empresa@gmail.com";
+    empresa1User.senha_hash = "123456";
     empresa1User.nome_exibicao = "TechCorp RH";
     empresa1User.perfil = UsuarioPerfil.EMPRESA;
     await usuarioRepository.save(empresa1User);

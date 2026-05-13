@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
+import '../widgets/skill_selector.dart';
 
 class StudentJobsPage extends StatefulWidget {
   const StudentJobsPage({super.key});
@@ -15,10 +16,15 @@ class StudentJobsPage extends StatefulWidget {
 
 class _StudentJobsPageState extends State<StudentJobsPage> {
   bool isLoading = true;
+  bool isSavingSkills = false;
+
   String? token;
   String? nome;
 
   List<dynamic> vagas = [];
+  List<dynamic> habilidadesDisponiveis = [];
+
+  Set<int> minhasHabilidadesIds = {};
   Map<int, String> statusCandidaturasPorVaga = {};
 
   @override
@@ -44,6 +50,8 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     });
 
     await Future.wait([
+      carregarHabilidades(),
+      carregarMeuPerfil(),
       carregarVagas(),
       carregarMinhasCandidaturas(),
     ]);
@@ -53,6 +61,49 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     setState(() {
       isLoading = false;
     });
+  }
+
+  Future<void> carregarHabilidades() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/habilidades'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data is List) {
+          habilidadesDisponiveis = data;
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> carregarMeuPerfil() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/alunos/me'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final relacoes = data['alunoHabilidades'];
+
+        if (relacoes is List) {
+          minhasHabilidadesIds = relacoes
+              .map((relacao) => relacao['habilidade_id'])
+              .where((id) => id is int)
+              .map<int>((id) => id as int)
+              .toSet();
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> carregarVagas() async {
@@ -72,20 +123,8 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
             return vaga['ativo'] == 1 || vaga['ativo'] == true;
           }).toList();
         }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Erro ao buscar as vagas disponíveis.')),
-          );
-        }
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Falha na comunicação com o servidor da API.')),
-        );
-      }
-    }
+    } catch (_) {}
   }
 
   Future<void> carregarMinhasCandidaturas() async {
@@ -107,14 +146,68 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
             final vagaId = candidatura['vaga_id'];
             final status = candidatura['status'];
 
-            if (vagaId != null && status != null) {
-              statusCandidaturasPorVaga[vagaId as int] = status.toString();
+            if (vagaId is int && status != null) {
+              statusCandidaturasPorVaga[vagaId] = status.toString();
             }
           }
         }
       }
-    } catch (e) {
-      // Erro tratado silenciosamente para não travar a UI
+    } catch (_) {}
+  }
+
+  Future<void> salvarMinhasHabilidades(Set<int> habilidadeIds) async {
+    setState(() {
+      isSavingSkills = true;
+    });
+
+    try {
+      final response = await http.put(
+        Uri.parse('${ApiConfig.baseUrl}/alunos/me/habilidades'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'habilidadeIds': habilidadeIds.toList(),
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        setState(() {
+          minhasHabilidadesIds = habilidadeIds;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Habilidades atualizadas com sucesso.'),
+          ),
+        );
+      } else {
+        String mensagem = 'Erro ao salvar habilidades.';
+
+        if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          mensagem = data['message'] ?? mensagem;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensagem)),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro de conexão com o servidor.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSavingSkills = false;
+        });
+      }
     }
   }
 
@@ -197,34 +290,122 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   String nomeEmpresa(dynamic vaga) {
     final empresa = vaga['empresa'];
     if (empresa == null) return 'Empresa não informada';
-    return empresa['nome_fantasia'] ?? empresa['razao_social'] ?? 'Empresa não informada';
+
+    final usuario = empresa['usuario'];
+    if (usuario == null) return 'Empresa não informada';
+
+    return usuario['nome_exibicao'] ??
+        usuario['nome'] ??
+        'Empresa não informada';
   }
 
   String labelStatusCandidatura(String status) {
     switch (status) {
-      case 'PENDENTE': return 'Em análise';
-      case 'ACEITA': return 'Aceita';
-      case 'REJEITADA': return 'Rejeitada';
-      default: return status;
+      case 'PENDENTE':
+        return 'Em análise';
+      case 'ACEITA':
+        return 'Aceita';
+      case 'REJEITADA':
+        return 'Rejeitada';
+      default:
+        return status;
     }
   }
 
   IconData iconeStatusCandidatura(String status) {
     switch (status) {
-      case 'PENDENTE': return Icons.hourglass_empty;
-      case 'ACEITA': return Icons.check_circle_outline;
-      case 'REJEITADA': return Icons.cancel_outlined;
-      default: return Icons.info_outline;
+      case 'PENDENTE':
+        return Icons.hourglass_empty;
+      case 'ACEITA':
+        return Icons.check_circle_outline;
+      case 'REJEITADA':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.info_outline;
     }
   }
 
   Color? corStatusCandidatura(String status) {
     switch (status) {
-      case 'PENDENTE': return Colors.orange.shade100;
-      case 'ACEITA': return Colors.green.shade100;
-      case 'REJEITADA': return Colors.red.shade100;
-      default: return null;
+      case 'PENDENTE':
+        return Colors.orange.shade100;
+      case 'ACEITA':
+        return Colors.green.shade100;
+      case 'REJEITADA':
+        return Colors.red.shade100;
+      default:
+        return null;
     }
+  }
+
+  List<dynamic> habilidadesDaVaga(dynamic vaga) {
+    final relacoes = vaga['vagaHabilidades'];
+
+    if (relacoes is List) {
+      return relacoes
+          .map((relacao) => relacao['habilidade'])
+          .where((habilidade) => habilidade != null)
+          .toList();
+    }
+
+    final legado = vaga['habilidades'];
+
+    if (legado is List) {
+      return legado
+          .map((nome) => {
+                'id': null,
+                'nome': nome.toString(),
+              })
+          .toList();
+    }
+
+    return [];
+  }
+
+  Widget chipsHabilidades(List<dynamic> habilidades) {
+    if (habilidades.isEmpty) {
+      return const Text(
+        'Nenhuma habilidade informada.',
+        style: TextStyle(fontStyle: FontStyle.italic),
+      );
+    }
+  }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: habilidades.map((habilidade) {
+        final id = habilidade['id'];
+        final alunoPossui = id is int && minhasHabilidadesIds.contains(id);
+
+        return Chip(
+          avatar: Icon(
+            alunoPossui ? Icons.check_circle_outline : Icons.label_outline,
+            size: 18,
+          ),
+          label: Text(habilidade['nome'] ?? 'Sem nome'),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget cardMinhasHabilidades() {
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: isSavingSkills
+            ? const Center(child: CircularProgressIndicator())
+            : SkillSelector(
+                title: 'Minhas habilidades',
+                habilidades: habilidadesDisponiveis,
+                selectedIds: minhasHabilidadesIds,
+                onChanged: (updated) async {
+                  await salvarMinhasHabilidades(updated);
+                },
+              ),
+      ),
+    );
   }
 
   Widget cardVaga(dynamic vaga) {
@@ -233,6 +414,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         vagaId != null ? statusCandidaturasPorVaga[vagaId] : null;
 
     final bool jaCandidatou = statusCandidatura != null;
+    final habilidades = habilidadesDaVaga(vaga);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -253,6 +435,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [
                 Chip(
                   label: Text(nomeEmpresa(vaga)),
@@ -264,49 +447,42 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            const Text(
+              'Habilidades exigidas',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            chipsHabilidades(habilidades),
             if ((vaga['requisitos'] ?? '').toString().isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text(
-                'Requisitos',
+                'Observações adicionais',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Text(vaga['requisitos']),
             ],
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton(
-                  onPressed: () {
-                    // AQUI: Integração com a rota da sua colega
-                    Navigator.pushNamed(
-                      context, 
-                      '/vaga-detalhes', 
-                      arguments: vaga,
-                    );
-                  },
-                  child: const Text('Ver detalhes'),
-                ),
-                const SizedBox(width: 8),
-                jaCandidatou
-                    ? Chip(
-                        avatar: Icon(
-                          iconeStatusCandidatura(statusCandidatura),
-                          size: 18,
-                        ),
-                        label: Text(
-                          labelStatusCandidatura(statusCandidatura),
-                        ),
-                        backgroundColor: corStatusCandidatura(statusCandidatura),
-                      )
-                    : ElevatedButton.icon(
-                        onPressed: vagaId == null
-                            ? null
-                            : () => confirmarCandidatura(vaga),
-                        icon: const Icon(Icons.send, size: 18),
-                        label: const Text('Candidatar-se'),
+            Align(
+              alignment: Alignment.centerRight,
+              child: jaCandidatou
+                  ? Chip(
+                      avatar: Icon(
+                        iconeStatusCandidatura(statusCandidatura),
+                        size: 18,
                       ),
-              ],
+                      label: Text(
+                        'Status: ${labelStatusCandidatura(statusCandidatura)}',
+                      ),
+                      backgroundColor: corStatusCandidatura(statusCandidatura),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: vagaId == null
+                          ? null
+                          : () => confirmarCandidatura(vaga),
+                      icon: const Icon(Icons.send),
+                      label: const Text('Candidatar-se'),
+                    ),
             ),
           ],
         ),
@@ -319,20 +495,26 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (vagas.isEmpty) {
-      return const Center(
-        child: Text('Nenhuma vaga disponível no momento.'),
-      );
-    }
-
     return RefreshIndicator(
       onRefresh: carregarDados,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: vagas.length,
-        itemBuilder: (context, index) {
-          return cardVaga(vagas[index]);
-        },
+      child: ListView(
+        children: [
+          cardMinhasHabilidades(),
+          if (vagas.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Text('Nenhuma vaga disponível no momento.'),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: vagas.map((vaga) => cardVaga(vaga)).toList(),
+              ),
+            ),
+        ],
       ),
     );
   }
