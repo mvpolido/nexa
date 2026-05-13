@@ -17,7 +17,8 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   bool isLoading = true;
   String? token;
   String? nome;
-  int? userId;
+
+  int selectedMenuIndex = 0;
 
   List<dynamic> vagas = [];
 
@@ -32,7 +33,6 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
     token = prefs.getString('token');
     nome = prefs.getString('user_nome');
-    userId = int.tryParse(prefs.getString('user_id') ?? '');
 
     if (token == null || token!.isEmpty) {
       if (!mounted) return;
@@ -41,6 +41,18 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     }
 
     await carregarVagas();
+  }
+
+  bool vagaArquivada(dynamic vaga) {
+    return vaga['ativo'] == 0 || vaga['ativo'] == false;
+  }
+
+  List<dynamic> get vagasAtivas {
+    return vagas.where((vaga) => !vagaArquivada(vaga)).toList();
+  }
+
+  List<dynamic> get vagasArquivadas {
+    return vagas.where((vaga) => vagaArquivada(vaga)).toList();
   }
 
   Future<void> carregarVagas() async {
@@ -61,21 +73,10 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
-        if (data is List) {
-          setState(() {
-            vagas = data.where((vaga) {
-              if (userId == null) return true;
-
-              final empresaId = vaga['empresa_id']?.toString();
-              final usuarioId = vaga['empresa']?['usuario']?['id']?.toString();
-
-              return empresaId == userId.toString() ||
-                  usuarioId == userId.toString();
-            }).toList();
-
-            isLoading = false;
-          });
-        }
+        setState(() {
+          vagas = data is List ? data : [];
+          isLoading = false;
+        });
       } else {
         setState(() {
           isLoading = false;
@@ -106,306 +107,373 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     Navigator.of(context).pushReplacementNamed('/');
   }
 
-    Future<void> abrirFormularioVaga({dynamic vaga}) async {
+  Future<void> abrirFormularioVaga({dynamic vaga}) async {
     final bool editando = vaga != null;
     final scaffoldContext = context;
 
     final tituloController = TextEditingController(
-        text: editando ? vaga['titulo'] ?? '' : '',
+      text: editando ? vaga['titulo'] ?? '' : '',
     );
 
     final descricaoController = TextEditingController(
-        text: editando ? vaga['descricao'] ?? '' : '',
+      text: editando ? vaga['descricao'] ?? '' : '',
     );
 
     final requisitosController = TextEditingController(
-        text: editando ? vaga['requisitos'] ?? '' : '',
+      text: editando ? vaga['requisitos'] ?? '' : '',
     );
 
     String modalidade = editando ? vaga['modalidade'] ?? 'REMOTO' : 'REMOTO';
 
     if (modalidade == 'HÍBRIDO') {
-        modalidade = 'HIBRIDO';
+      modalidade = 'HIBRIDO';
     }
 
     if (!['REMOTO', 'PRESENCIAL', 'HIBRIDO'].contains(modalidade)) {
-        modalidade = 'REMOTO';
+      modalidade = 'REMOTO';
     }
 
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
-        context: context,
-        builder: (dialogContext) {
+      context: context,
+      builder: (dialogContext) {
         bool salvando = false;
 
         return StatefulBuilder(
-            builder: (context, setDialogState) {
+          builder: (context, setDialogState) {
             Future<void> salvar() async {
-                if (!(formKey.currentState?.validate() ?? false)) return;
+              if (!(formKey.currentState?.validate() ?? false)) return;
 
-                setDialogState(() {
+              setDialogState(() {
                 salvando = true;
-                });
+              });
 
-                try {
+              try {
                 final body = jsonEncode({
-                    'titulo': tituloController.text.trim(),
-                    'descricao': descricaoController.text.trim(),
-                    'requisitos': requisitosController.text.trim(),
-                    'modalidade': modalidade,
-                    'habilidades': [],
+                  'titulo': tituloController.text.trim(),
+                  'descricao': descricaoController.text.trim(),
+                  'requisitos': requisitosController.text.trim(),
+                  'modalidade': modalidade,
+                  'habilidades': [],
                 });
 
                 final response = editando
                     ? await http.put(
                         Uri.parse('${ApiConfig.baseUrl}/vagas/${vaga['id']}'),
                         headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer $token',
+                          'Content-Type': 'application/json',
+                          'Authorization': 'Bearer $token',
                         },
                         body: body,
-                        )
+                      )
                     : await http.post(
                         Uri.parse('${ApiConfig.baseUrl}/vagas'),
                         headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer $token',
+                          'Content-Type': 'application/json',
+                          'Authorization': 'Bearer $token',
                         },
                         body: body,
-                        );
+                      );
 
                 if (!mounted) return;
 
                 if (response.statusCode == 200 || response.statusCode == 201) {
-                    Navigator.of(dialogContext).pop();
+                  Navigator.of(dialogContext).pop();
 
-                    ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                  ScaffoldMessenger.of(scaffoldContext).showSnackBar(
                     SnackBar(
-                        content: Text(
+                      content: Text(
                         editando
                             ? 'Vaga atualizada com sucesso.'
                             : 'Vaga criada com sucesso.',
-                        ),
+                      ),
                     ),
-                    );
+                  );
 
-                    await carregarVagas();
+                  await carregarVagas();
                 } else {
-                    String mensagem = 'Erro ao salvar vaga.';
+                  String mensagem = 'Erro ao salvar vaga.';
 
-                    if (response.body.isNotEmpty) {
+                  if (response.body.isNotEmpty) {
                     final data = jsonDecode(response.body);
                     mensagem = data['message'] ?? mensagem;
-                    }
+                  }
 
-                    ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                  ScaffoldMessenger.of(scaffoldContext).showSnackBar(
                     SnackBar(content: Text(mensagem)),
-                    );
+                  );
 
-                    if (mounted) {
+                  if (mounted) {
                     setDialogState(() {
-                        salvando = false;
+                      salvando = false;
                     });
-                    }
+                  }
                 }
-                } catch (_) {
+              } catch (_) {
                 if (!mounted) return;
 
                 ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-                    const SnackBar(
+                  const SnackBar(
                     content: Text('Erro de conexão com o servidor.'),
-                    ),
+                  ),
                 );
 
                 if (mounted) {
-                    setDialogState(() {
+                  setDialogState(() {
                     salvando = false;
-                    });
+                  });
                 }
-                }
+              }
             }
 
             return AlertDialog(
-                title: Text(editando ? 'Editar vaga' : 'Nova vaga'),
-                content: SizedBox(
+              title: Text(editando ? 'Editar vaga' : 'Nova vaga'),
+              content: SizedBox(
                 width: 520,
                 child: Form(
-                    key: formKey,
-                    child: SingleChildScrollView(
+                  key: formKey,
+                  child: SingleChildScrollView(
                     child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         TextFormField(
-                            controller: tituloController,
-                            decoration: const InputDecoration(
+                          controller: tituloController,
+                          decoration: const InputDecoration(
                             labelText: 'Título',
                             border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
+                          ),
+                          validator: (value) {
                             if ((value ?? '').trim().isEmpty) {
-                                return 'Informe o título.';
+                              return 'Informe o título.';
                             }
 
                             return null;
-                            },
+                          },
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
-                            controller: descricaoController,
-                            minLines: 3,
-                            maxLines: 5,
-                            decoration: const InputDecoration(
+                          controller: descricaoController,
+                          minLines: 3,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
                             labelText: 'Descrição',
                             border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
+                          ),
+                          validator: (value) {
                             if ((value ?? '').trim().isEmpty) {
-                                return 'Informe a descrição.';
+                              return 'Informe a descrição.';
                             }
 
                             return null;
-                            },
+                          },
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
-                            controller: requisitosController,
-                            minLines: 2,
-                            maxLines: 4,
-                            decoration: const InputDecoration(
+                          controller: requisitosController,
+                          minLines: 2,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
                             labelText: 'Requisitos',
                             border: OutlineInputBorder(),
-                            ),
+                          ),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                            value: modalidade,
-                            decoration: const InputDecoration(
+                          value: modalidade,
+                          decoration: const InputDecoration(
                             labelText: 'Modalidade',
                             border: OutlineInputBorder(),
-                            ),
-                            items: const [
+                          ),
+                          items: const [
                             DropdownMenuItem(
-                                value: 'REMOTO',
-                                child: Text('Remoto'),
-                            ),
-                            DropdownMenuItem(
-                                value: 'PRESENCIAL',
-                                child: Text('Presencial'),
+                              value: 'REMOTO',
+                              child: Text('Remoto'),
                             ),
                             DropdownMenuItem(
-                                value: 'HIBRIDO',
-                                child: Text('Híbrido'),
+                              value: 'PRESENCIAL',
+                              child: Text('Presencial'),
                             ),
-                            ],
-                            onChanged: (value) {
+                            DropdownMenuItem(
+                              value: 'HIBRIDO',
+                              child: Text('Híbrido'),
+                            ),
+                          ],
+                          onChanged: (value) {
                             if (value == null) return;
 
                             setDialogState(() {
-                                modalidade = value;
+                              modalidade = value;
                             });
-                            },
+                          },
                         ),
-                        ],
+                      ],
                     ),
-                    ),
+                  ),
                 ),
-                ),
-                actions: [
+              ),
+              actions: [
                 TextButton(
-                    onPressed: salvando
-                        ? null
-                        : () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Cancelar'),
+                  onPressed: salvando
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
-                    onPressed: salvando ? null : salvar,
-                    child: salvando
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                  onPressed: salvando ? null : salvar,
+                  child: salvando
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                        : const Text('Salvar'),
+                      : const Text('Salvar'),
                 ),
-                ],
+              ],
             );
-            },
+          },
         );
-        },
+      },
     );
 
     tituloController.dispose();
     descricaoController.dispose();
     requisitosController.dispose();
-    }
+  }
 
-    Future<void> confirmarArquivamento(dynamic vaga) async {
+  Future<void> confirmarArquivamento(dynamic vaga) async {
     final confirmar = await showDialog<bool>(
-        context: context,
-        builder: (context) {
+      context: context,
+      builder: (context) {
         return AlertDialog(
-            title: const Text('Arquivar vaga'),
-            content: Text(
+          title: const Text('Arquivar vaga'),
+          content: Text(
             'Deseja realmente arquivar a vaga "${vaga['titulo'] ?? 'Sem título'}"?\n\n'
             'Ela não aparecerá mais para alunos, mas as candidaturas serão preservadas.',
-            ),
-            actions: [
+          ),
+          actions: [
             TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancelar'),
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
             ),
             ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Arquivar'),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Arquivar'),
             ),
-            ],
+          ],
         );
-        },
+      },
     );
 
     if (confirmar == true) {
-        await arquivarVaga(vaga['id']);
+      await arquivarVaga(vaga['id']);
     }
-    }
+  }
 
-    Future<void> arquivarVaga(int vagaId) async {
+  Future<void> confirmarDesarquivamento(dynamic vaga) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Desarquivar vaga'),
+          content: Text(
+            'Deseja realmente desarquivar a vaga "${vaga['titulo'] ?? 'Sem título'}"?\n\n'
+            'Ela voltará a aparecer para os alunos.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Desarquivar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar == true) {
+      await desarquivarVaga(vaga['id']);
+    }
+  }
+
+  Future<void> arquivarVaga(int vagaId) async {
     try {
-        final response = await http.patch(
+      final response = await http.patch(
         Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId/arquivar'),
         headers: {
-            'Authorization': 'Bearer $token',
+          'Authorization': 'Bearer $token',
         },
-        );
+      );
 
-        if (!mounted) return;
+      if (!mounted) return;
 
-        if (response.statusCode == 200) {
+      if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Vaga arquivada com sucesso.')),
+          const SnackBar(content: Text('Vaga arquivada com sucesso.')),
         );
 
         await carregarVagas();
-        } else {
+      } else {
         String mensagem = 'Erro ao arquivar vaga.';
 
         if (response.body.isNotEmpty) {
-            final data = jsonDecode(response.body);
-            mensagem = data['message'] ?? mensagem;
+          final data = jsonDecode(response.body);
+          mensagem = data['message'] ?? mensagem;
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(mensagem)),
+          SnackBar(content: Text(mensagem)),
         );
-        }
+      }
     } catch (_) {
-        if (!mounted) return;
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro de conexão com o servidor.')),
+      );
+    }
+  }
+
+  Future<void> desarquivarVaga(int vagaId) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId/desarquivar'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Vaga desarquivada com sucesso.')),
+        );
+
+        await carregarVagas();
+      } else {
+        String mensagem = 'Erro ao desarquivar vaga.';
+
+        if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          mensagem = data['message'] ?? mensagem;
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erro de conexão com o servidor.')),
+          SnackBar(content: Text(mensagem)),
         );
+      }
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro de conexão com o servidor.')),
+      );
     }
-    }
+  }
 
   Future<void> verCandidatos(dynamic vaga) async {
     final int? vagaId = vaga['id'];
@@ -500,84 +568,101 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   }
 
   Widget cardVaga(dynamic vaga) {
-    final bool vagaArquivada = vaga['ativo'] == 0 || vaga['ativo'] == false;
+    final bool arquivada = vagaArquivada(vaga);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              vaga['titulo'] ?? 'Sem título',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+        child: Opacity(
+          opacity: arquivada ? 0.78 : 1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                vaga['titulo'] ?? 'Sem título',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(vaga['descricao'] ?? 'Sem descrição.'),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                Chip(
-                  label: Text(vaga['modalidade'] ?? '-'),
-                  avatar: const Icon(Icons.work_outline, size: 18),
-                ),
-                Chip(
-                label: Text(vagaArquivada ? 'Arquivada' : 'Ativa'),
-                avatar: Icon(
-                    vagaArquivada ? Icons.archive_outlined : Icons.check_circle_outline,
-                    size: 18,
-                    ),
-                ),
-              ],
-            ),
-            if ((vaga['requisitos'] ?? '').toString().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(vaga['descricao'] ?? 'Sem descrição.'),
               const SizedBox(height: 12),
-              const Text(
-                'Requisitos',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(
+                    label: Text(vaga['modalidade'] ?? '-'),
+                    avatar: const Icon(Icons.work_outline, size: 18),
+                  ),
+                  Chip(
+                    label: Text(arquivada ? 'Arquivada' : 'Ativa'),
+                    avatar: Icon(
+                      arquivada
+                          ? Icons.archive_outlined
+                          : Icons.check_circle_outline,
+                      size: 18,
+                    ),
+                  ),
+                ],
               ),
-              Text(vaga['requisitos']),
-            ],
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                onPressed: vagaArquivada ? null : () => abrirFormularioVaga(vaga: vaga),
-                icon: const Icon(Icons.edit),
-                label: const Text('Editar'),
+              if ((vaga['requisitos'] ?? '').toString().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Requisitos',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                OutlinedButton.icon(
-                  onPressed: () => verCandidatos(vaga),
-                  icon: const Icon(Icons.people),
-                  label: const Text('Ver candidatos'),
-                ),
-                OutlinedButton.icon(
-                onPressed: vagaArquivada ? null : () => confirmarArquivamento(vaga),
-                icon: const Icon(Icons.archive_outlined),
-                label: Text(vagaArquivada ? 'Arquivada' : 'Arquivar'),
-                ),
+                Text(vaga['requisitos']),
               ],
-            ),
-          ],
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed:
+                        arquivada ? null : () => abrirFormularioVaga(vaga: vaga),
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Editar'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => verCandidatos(vaga),
+                    icon: const Icon(Icons.people),
+                    label: const Text('Ver candidatos'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: arquivada
+                        ? () => confirmarDesarquivamento(vaga)
+                        : () => confirmarArquivamento(vaga),
+                    icon: Icon(
+                      arquivada
+                          ? Icons.unarchive_outlined
+                          : Icons.archive_outlined,
+                    ),
+                    label: Text(arquivada ? 'Desarquivar' : 'Arquivar'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget conteudo() {
+  Widget listaDeVagas(List<dynamic> lista, String mensagemVazia) {
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (vagas.isEmpty) {
-      return const Center(
-        child: Text('Sua empresa ainda não cadastrou nenhuma vaga.'),
+    if (lista.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(mensagemVazia, textAlign: TextAlign.center),
+        ),
       );
     }
 
@@ -585,16 +670,72 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       onRefresh: carregarVagas,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: vagas.length,
+        itemCount: lista.length,
         itemBuilder: (context, index) {
-          return cardVaga(vagas[index]);
+          return cardVaga(lista[index]);
         },
       ),
     );
   }
 
+  Widget conteudoSelecionado() {
+    if (selectedMenuIndex == 0) {
+      return listaDeVagas(
+        vagasAtivas,
+        'Sua empresa não possui vagas ativas no momento.',
+      );
+    }
+
+    return listaDeVagas(
+      vagasArquivadas,
+      'Sua empresa não possui vagas arquivadas no momento.',
+    );
+  }
+
+  Widget menuLateral() {
+    return NavigationRail(
+      selectedIndex: selectedMenuIndex,
+      onDestinationSelected: (index) {
+        setState(() {
+          selectedMenuIndex = index;
+        });
+      },
+      labelType: NavigationRailLabelType.all,
+      destinations: [
+        NavigationRailDestination(
+          icon: const Icon(Icons.work_outline),
+          selectedIcon: const Icon(Icons.work),
+          label: Text('Vagas ativas (${vagasAtivas.length})'),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.archive_outlined),
+          selectedIcon: const Icon(Icons.archive),
+          label: Text('Arquivadas (${vagasArquivadas.length})'),
+        ),
+      ],
+    );
+  }
+
+  String tituloTela() {
+    if (selectedMenuIndex == 0) {
+      return 'Vagas ativas';
+    }
+
+    return 'Vagas arquivadas';
+  }
+
+  String subtituloTela() {
+    if (selectedMenuIndex == 0) {
+      return 'Vagas visíveis para alunos e abertas para candidatura.';
+    }
+
+    return 'Vagas ocultas para alunos, com histórico de candidatos preservado.';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool mostrandoArquivadas = selectedMenuIndex == 1;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dashboard da Empresa'),
@@ -609,23 +750,48 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => abrirFormularioVaga(),
-        icon: const Icon(Icons.add),
-        label: const Text('Nova vaga'),
-      ),
-      body: Column(
+      floatingActionButton: mostrandoArquivadas
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => abrirFormularioVaga(),
+              icon: const Icon(Icons.add),
+              label: const Text('Nova vaga'),
+            ),
+      body: Row(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: Theme.of(context).colorScheme.primaryContainer,
-            child: Text(
-              'Olá, ${nome ?? 'empresa'} | Gestão de vagas e candidatos',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+          menuLateral(),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Olá, ${nome ?? 'empresa'}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        tituloTela(),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(subtituloTela()),
+                    ],
+                  ),
+                ),
+                Expanded(child: conteudoSelecionado()),
+              ],
             ),
           ),
-          Expanded(child: conteudo()),
         ],
       ),
     );

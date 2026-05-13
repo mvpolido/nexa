@@ -11,9 +11,9 @@ router.post("/", authMiddleware, VagaController.create);
 router.put("/:id", authMiddleware, VagaController.update);
 
 router.patch("/:id/arquivar", authMiddleware, VagaController.archive);
+router.patch("/:id/desarquivar", authMiddleware, VagaController.unarchive);
 
-// Mantido por compatibilidade, mas agora também arquiva.
-// Não remove fisicamente do banco.
+// Mantido por compatibilidade: DELETE agora apenas arquiva.
 router.delete("/:id", authMiddleware, VagaController.delete);
 
 export default router;

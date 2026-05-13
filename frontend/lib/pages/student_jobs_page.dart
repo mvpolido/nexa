@@ -54,25 +54,24 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       isLoading = false;
     });
   }
-
-  Future<void> carregarVagas() async {
+    Future<void> carregarVagas() async {
     final response = await http.get(
-      Uri.parse('${ApiConfig.baseUrl}/vagas'),
-      headers: {
+        Uri.parse('${ApiConfig.baseUrl}/vagas'),
+        headers: {
         'Authorization': 'Bearer $token',
-      },
+        },
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+        final data = jsonDecode(response.body);
 
         if (data is List) {
-            vagas = data.where((vaga) {
-                return vaga['ativo'] == 1 || vaga['ativo'] == true;
-            }).toList();
+        vagas = data.where((vaga) {
+            return vaga['ativo'] == 1 || vaga['ativo'] == true;
+        }).toList();
         }
     }
-  }
+    }
 
   Future<void> carregarMinhasCandidaturas() async {
     final response = await http.get(

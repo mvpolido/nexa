@@ -83,22 +83,22 @@ export class VagaController {
       const vagaRepository = AppDataSource.getRepository(Vaga);
 
       if (perfilLogado === UsuarioPerfil.EMPRESA) {
-        const vagasDaEmpresa = await vagaRepository.find({
+        const vagas = await vagaRepository.find({
           where: { empresa_id: usuarioLogadoId },
           relations: ["empresa", "empresa.usuario"],
           order: { criado_em: "DESC" },
         });
 
-        return res.status(200).json(vagasDaEmpresa);
+        return res.status(200).json(vagas);
       }
 
-      const vagasAtivas = await vagaRepository.find({
+      const vagas = await vagaRepository.find({
         where: { ativo: 1 },
         relations: ["empresa", "empresa.usuario"],
         order: { criado_em: "DESC" },
       });
 
-      return res.status(200).json(vagasAtivas);
+      return res.status(200).json(vagas);
     } catch (error: any) {
       return res.status(500).json({
         message: "Erro ao listar vagas.",
@@ -110,8 +110,8 @@ export class VagaController {
   static async getById(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const perfilLogado = (req as any).usuarioPerfil;
       const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
 
       const vagaRepository = AppDataSource.getRepository(Vaga);
 
@@ -270,6 +270,58 @@ export class VagaController {
     } catch (error: any) {
       return res.status(500).json({
         message: "Erro ao arquivar vaga.",
+        error: error.message,
+      });
+    }
+  }
+
+  static async unarchive(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        return res.status(403).json({
+          message: "Apenas empresas podem desarquivar vagas.",
+        });
+      }
+
+      const vagaRepository = AppDataSource.getRepository(Vaga);
+
+      const vaga = await vagaRepository.findOne({
+        where: { id: Number(id) },
+      });
+
+      if (!vaga) {
+        return res.status(404).json({
+          message: "Vaga não encontrada.",
+        });
+      }
+
+      if (vaga.empresa_id !== usuarioLogadoId) {
+        return res.status(403).json({
+          message: "Você só pode desarquivar vagas da sua própria empresa.",
+        });
+      }
+
+      if (vaga.ativo === 1) {
+        return res.status(400).json({
+          message: "Esta vaga já está ativa.",
+        });
+      }
+
+      vaga.ativo = 1;
+
+      const vagaDesarquivada = await vagaRepository.save(vaga);
+
+      return res.status(200).json({
+        message: "Vaga desarquivada com sucesso.",
+        vaga: vagaDesarquivada,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao desarquivar vaga.",
         error: error.message,
       });
     }
