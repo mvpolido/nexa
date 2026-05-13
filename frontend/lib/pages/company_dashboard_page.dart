@@ -340,64 +340,72 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     requisitosController.dispose();
     }
 
-  Future<void> confirmarRemocao(dynamic vaga) async {
+    Future<void> confirmarArquivamento(dynamic vaga) async {
     final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) {
+        context: context,
+        builder: (context) {
         return AlertDialog(
-          title: const Text('Remover vaga'),
-          content: Text(
-            'Deseja realmente remover a vaga "${vaga['titulo'] ?? 'Sem título'}"?',
-          ),
-          actions: [
+            title: const Text('Arquivar vaga'),
+            content: Text(
+            'Deseja realmente arquivar a vaga "${vaga['titulo'] ?? 'Sem título'}"?\n\n'
+            'Ela não aparecerá mais para alunos, mas as candidaturas serão preservadas.',
+            ),
+            actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancelar'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Remover'),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Arquivar'),
             ),
-          ],
+            ],
         );
-      },
+        },
     );
 
     if (confirmar == true) {
-      await removerVaga(vaga['id']);
+        await arquivarVaga(vaga['id']);
     }
-  }
+    }
 
-  Future<void> removerVaga(int vagaId) async {
+    Future<void> arquivarVaga(int vagaId) async {
     try {
-      final response = await http.delete(
-        Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId'),
+        final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId/arquivar'),
         headers: {
-          'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $token',
         },
-      );
+        );
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (response.statusCode == 200 || response.statusCode == 204) {
+        if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vaga removida com sucesso.')),
+            const SnackBar(content: Text('Vaga arquivada com sucesso.')),
         );
 
         await carregarVagas();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao remover vaga.')),
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
+        } else {
+        String mensagem = 'Erro ao arquivar vaga.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
+        if (response.body.isNotEmpty) {
+            final data = jsonDecode(response.body);
+            mensagem = data['message'] ?? mensagem;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(mensagem)),
+        );
+        }
+    } catch (_) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Erro de conexão com o servidor.')),
-      );
+        );
     }
-  }
+    }
 
   Future<void> verCandidatos(dynamic vaga) async {
     final int? vagaId = vaga['id'];
@@ -492,6 +500,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   }
 
   Widget cardVaga(dynamic vaga) {
+    final bool vagaArquivada = vaga['ativo'] == 0 || vaga['ativo'] == false;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -517,8 +526,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                   avatar: const Icon(Icons.work_outline, size: 18),
                 ),
                 Chip(
-                  label: Text(vaga['ativo'] == false ? 'Inativa' : 'Ativa'),
-                  avatar: const Icon(Icons.check_circle_outline, size: 18),
+                label: Text(vagaArquivada ? 'Arquivada' : 'Ativa'),
+                avatar: Icon(
+                    vagaArquivada ? Icons.archive_outlined : Icons.check_circle_outline,
+                    size: 18,
+                    ),
                 ),
               ],
             ),
@@ -536,9 +548,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
               runSpacing: 8,
               children: [
                 OutlinedButton.icon(
-                  onPressed: () => abrirFormularioVaga(vaga: vaga),
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Editar'),
+                onPressed: vagaArquivada ? null : () => abrirFormularioVaga(vaga: vaga),
+                icon: const Icon(Icons.edit),
+                label: const Text('Editar'),
                 ),
                 OutlinedButton.icon(
                   onPressed: () => verCandidatos(vaga),
@@ -546,9 +558,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                   label: const Text('Ver candidatos'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => confirmarRemocao(vaga),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Remover'),
+                onPressed: vagaArquivada ? null : () => confirmarArquivamento(vaga),
+                icon: const Icon(Icons.archive_outlined),
+                label: Text(vagaArquivada ? 'Arquivada' : 'Arquivar'),
                 ),
               ],
             ),

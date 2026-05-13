@@ -66,9 +66,11 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
 
-      if (data is List) {
-        vagas = data;
-      }
+        if (data is List) {
+            vagas = data.where((vaga) {
+                return vaga['ativo'] == 1 || vaga['ativo'] == true;
+            }).toList();
+        }
     }
   }
 

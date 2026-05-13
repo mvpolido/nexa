@@ -39,6 +39,7 @@ export class VagaController {
       }
 
       const empresaRepository = AppDataSource.getRepository(Empresa);
+
       const empresa = await empresaRepository.findOne({
         where: { id: usuarioLogadoId },
       });
@@ -68,7 +69,7 @@ export class VagaController {
       return res.status(201).json(vagaSalva);
     } catch (error: any) {
       return res.status(500).json({
-        message: "Erro ao criar vaga",
+        message: "Erro ao criar vaga.",
         error: error.message,
       });
     }
@@ -76,18 +77,31 @@ export class VagaController {
 
   static async getAll(req: Request, res: Response) {
     try {
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+
       const vagaRepository = AppDataSource.getRepository(Vaga);
 
-      const vagas = await vagaRepository.find({
+      if (perfilLogado === UsuarioPerfil.EMPRESA) {
+        const vagasDaEmpresa = await vagaRepository.find({
+          where: { empresa_id: usuarioLogadoId },
+          relations: ["empresa", "empresa.usuario"],
+          order: { criado_em: "DESC" },
+        });
+
+        return res.status(200).json(vagasDaEmpresa);
+      }
+
+      const vagasAtivas = await vagaRepository.find({
         where: { ativo: 1 },
         relations: ["empresa", "empresa.usuario"],
         order: { criado_em: "DESC" },
       });
 
-      return res.status(200).json(vagas);
+      return res.status(200).json(vagasAtivas);
     } catch (error: any) {
       return res.status(500).json({
-        message: "Erro ao listar vagas",
+        message: "Erro ao listar vagas.",
         error: error.message,
       });
     }
@@ -96,6 +110,8 @@ export class VagaController {
   static async getById(req: Request, res: Response) {
     try {
       const { id } = req.params;
+      const perfilLogado = (req as any).usuarioPerfil;
+      const usuarioLogadoId = (req as any).usuarioId;
 
       const vagaRepository = AppDataSource.getRepository(Vaga);
 
@@ -110,10 +126,25 @@ export class VagaController {
         });
       }
 
+      if (perfilLogado === UsuarioPerfil.ALUNO && vaga.ativo !== 1) {
+        return res.status(404).json({
+          message: "Vaga não encontrada.",
+        });
+      }
+
+      if (
+        perfilLogado === UsuarioPerfil.EMPRESA &&
+        vaga.empresa_id !== usuarioLogadoId
+      ) {
+        return res.status(403).json({
+          message: "Você só pode acessar vagas da sua própria empresa.",
+        });
+      }
+
       return res.status(200).json(vaga);
     } catch (error: any) {
       return res.status(500).json({
-        message: "Erro ao buscar vaga",
+        message: "Erro ao buscar vaga.",
         error: error.message,
       });
     }
@@ -149,6 +180,12 @@ export class VagaController {
         });
       }
 
+      if (vaga.ativo !== 1) {
+        return res.status(400).json({
+          message: "Não é possível editar uma vaga arquivada.",
+        });
+      }
+
       const {
         titulo,
         descricao,
@@ -159,26 +196,34 @@ export class VagaController {
         habilidades,
       } = req.body;
 
+      if (modalidade && !Object.values(VagaModalidade).includes(modalidade)) {
+        return res.status(400).json({
+          message: "Modalidade inválida.",
+        });
+      }
+
       vaga.titulo = titulo ?? vaga.titulo;
       vaga.descricao = descricao ?? vaga.descricao;
       vaga.requisitos = requisitos ?? vaga.requisitos;
       vaga.modalidade = modalidade ?? vaga.modalidade;
       vaga.latitude = latitude ?? vaga.latitude;
       vaga.longitude = longitude ?? vaga.longitude;
-      vaga.habilidades = Array.isArray(habilidades) ? habilidades : vaga.habilidades;
+      vaga.habilidades = Array.isArray(habilidades)
+        ? habilidades
+        : vaga.habilidades;
 
       const vagaAtualizada = await vagaRepository.save(vaga);
 
       return res.status(200).json(vagaAtualizada);
     } catch (error: any) {
       return res.status(500).json({
-        message: "Erro ao atualizar vaga",
+        message: "Erro ao atualizar vaga.",
         error: error.message,
       });
     }
   }
 
-  static async delete(req: Request, res: Response) {
+  static async archive(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const usuarioLogadoId = (req as any).usuarioId;
@@ -186,7 +231,7 @@ export class VagaController {
 
       if (perfilLogado !== UsuarioPerfil.EMPRESA) {
         return res.status(403).json({
-          message: "Apenas empresas podem remover vagas.",
+          message: "Apenas empresas podem arquivar vagas.",
         });
       }
 
@@ -204,21 +249,33 @@ export class VagaController {
 
       if (vaga.empresa_id !== usuarioLogadoId) {
         return res.status(403).json({
-          message: "Você só pode remover vagas da sua própria empresa.",
+          message: "Você só pode arquivar vagas da sua própria empresa.",
+        });
+      }
+
+      if (vaga.ativo !== 1) {
+        return res.status(400).json({
+          message: "Esta vaga já está arquivada.",
         });
       }
 
       vaga.ativo = 0;
-      await vagaRepository.save(vaga);
+
+      const vagaArquivada = await vagaRepository.save(vaga);
 
       return res.status(200).json({
-        message: "Vaga removida com sucesso.",
+        message: "Vaga arquivada com sucesso.",
+        vaga: vagaArquivada,
       });
     } catch (error: any) {
       return res.status(500).json({
-        message: "Erro ao remover vaga",
+        message: "Erro ao arquivar vaga.",
         error: error.message,
       });
     }
+  }
+
+  static async delete(req: Request, res: Response) {
+    return VagaController.archive(req, res);
   }
 }
