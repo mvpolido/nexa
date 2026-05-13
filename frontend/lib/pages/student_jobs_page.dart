@@ -114,7 +114,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         }
       }
     } catch (e) {
-      // Falha silenciosa ou log de erro
+      // Erro tratado silenciosamente para não travar a UI
     }
   }
 
@@ -202,40 +202,28 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
   String labelStatusCandidatura(String status) {
     switch (status) {
-      case 'PENDENTE':
-        return 'Em análise';
-      case 'ACEITA':
-        return 'Aceita';
-      case 'REJEITADA':
-        return 'Rejeitada';
-      default:
-        return status;
+      case 'PENDENTE': return 'Em análise';
+      case 'ACEITA': return 'Aceita';
+      case 'REJEITADA': return 'Rejeitada';
+      default: return status;
     }
   }
 
   IconData iconeStatusCandidatura(String status) {
     switch (status) {
-      case 'PENDENTE':
-        return Icons.hourglass_empty;
-      case 'ACEITA':
-        return Icons.check_circle_outline;
-      case 'REJEITADA':
-        return Icons.cancel_outlined;
-      default:
-        return Icons.info_outline;
+      case 'PENDENTE': return Icons.hourglass_empty;
+      case 'ACEITA': return Icons.check_circle_outline;
+      case 'REJEITADA': return Icons.cancel_outlined;
+      default: return Icons.info_outline;
     }
   }
 
   Color? corStatusCandidatura(String status) {
     switch (status) {
-      case 'PENDENTE':
-        return Colors.orange.shade100;
-      case 'ACEITA':
-        return Colors.green.shade100;
-      case 'REJEITADA':
-        return Colors.red.shade100;
-      default:
-        return null;
+      case 'PENDENTE': return Colors.orange.shade100;
+      case 'ACEITA': return Colors.green.shade100;
+      case 'REJEITADA': return Colors.red.shade100;
+      default: return null;
     }
   }
 
@@ -290,8 +278,11 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
               children: [
                 OutlinedButton(
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Ver detalhes em construção')),
+                    // AQUI: Integração com a rota da sua colega
+                    Navigator.pushNamed(
+                      context, 
+                      '/vaga-detalhes', 
+                      arguments: vaga,
                     );
                   },
                   child: const Text('Ver detalhes'),
