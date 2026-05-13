@@ -54,50 +54,70 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       isLoading = false;
     });
   }
-    Future<void> carregarVagas() async {
-    final response = await http.get(
+
+  Future<void> carregarVagas() async {
+    try {
+      final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/vagas'),
         headers: {
-        'Authorization': 'Bearer $token',
+          'Authorization': 'Bearer $token',
         },
-    );
+      );
 
-    if (response.statusCode == 200) {
+      if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
         if (data is List) {
-        vagas = data.where((vaga) {
+          vagas = data.where((vaga) {
             return vaga['ativo'] == 1 || vaga['ativo'] == true;
-        }).toList();
+          }).toList();
         }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro ao buscar as vagas disponíveis.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Falha na comunicação com o servidor da API.')),
+        );
+      }
     }
-    }
+  }
 
-    Future<void> carregarMinhasCandidaturas() async {
-    final response = await http.get(
+  Future<void> carregarMinhasCandidaturas() async {
+    try {
+      final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/alunos/me/candidaturas'),
         headers: {
-        'Authorization': 'Bearer $token',
+          'Authorization': 'Bearer $token',
         },
-    );
+      );
 
-    if (response.statusCode == 200) {
+      if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
         if (data is List) {
-        statusCandidaturasPorVaga = {};
+          statusCandidaturasPorVaga = {};
 
-        for (final candidatura in data) {
+          for (final candidatura in data) {
             final vagaId = candidatura['vaga_id'];
             final status = candidatura['status'];
 
             if (vagaId != null && status != null) {
-            statusCandidaturasPorVaga[vagaId as int] = status.toString();
+              statusCandidaturasPorVaga[vagaId as int] = status.toString();
             }
+          }
         }
-        }
+      }
+    } catch (e) {
+      // Falha silenciosa ou log de erro
     }
-    }
+  }
+
   Future<void> confirmarCandidatura(dynamic vaga) async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -145,8 +165,8 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       if (!mounted) return;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-            setState(() {
-            statusCandidaturasPorVaga[vagaId] = 'PENDENTE';
+        setState(() {
+          statusCandidaturasPorVaga[vagaId] = 'PENDENTE';
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -176,57 +196,50 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
   String nomeEmpresa(dynamic vaga) {
     final empresa = vaga['empresa'];
-
     if (empresa == null) return 'Empresa não informada';
-
-    final usuario = empresa['usuario'];
-
-    if (usuario == null) return 'Empresa não informada';
-
-    return usuario['nome_exibicao'] ?? usuario['nome'] ?? 'Empresa não informada';
+    return empresa['nome_fantasia'] ?? empresa['razao_social'] ?? 'Empresa não informada';
   }
-
 
   String labelStatusCandidatura(String status) {
     switch (status) {
-        case 'PENDENTE':
+      case 'PENDENTE':
         return 'Em análise';
-        case 'ACEITA':
+      case 'ACEITA':
         return 'Aceita';
-        case 'REJEITADA':
+      case 'REJEITADA':
         return 'Rejeitada';
-        default:
+      default:
         return status;
     }
-    }
+  }
 
-    IconData iconeStatusCandidatura(String status) {
+  IconData iconeStatusCandidatura(String status) {
     switch (status) {
-        case 'PENDENTE':
+      case 'PENDENTE':
         return Icons.hourglass_empty;
-        case 'ACEITA':
+      case 'ACEITA':
         return Icons.check_circle_outline;
-        case 'REJEITADA':
+      case 'REJEITADA':
         return Icons.cancel_outlined;
-        default:
+      default:
         return Icons.info_outline;
     }
-    }
+  }
 
-    Color? corStatusCandidatura(String status) {
+  Color? corStatusCandidatura(String status) {
     switch (status) {
-        case 'PENDENTE':
+      case 'PENDENTE':
         return Colors.orange.shade100;
-        case 'ACEITA':
+      case 'ACEITA':
         return Colors.green.shade100;
-        case 'REJEITADA':
+      case 'REJEITADA':
         return Colors.red.shade100;
-        default:
+      default:
         return null;
     }
-    }
+  }
 
-    Widget cardVaga(dynamic vaga) {
+  Widget cardVaga(dynamic vaga) {
     final int? vagaId = vaga['id'];
     final String? statusCandidatura =
         vagaId != null ? statusCandidaturasPorVaga[vagaId] : null;
@@ -272,24 +285,37 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
               Text(vaga['requisitos']),
             ],
             const SizedBox(height: 16),
-            Align(
-            alignment: Alignment.centerRight,
-            child: jaCandidatou
-                ? Chip(
-                    avatar: Icon(
-                        iconeStatusCandidatura(statusCandidatura),
-                        size: 18,
-                    ),
-                    label: Text(
-                        'Status: ${labelStatusCandidatura(statusCandidatura)}',
-                    ),
-                    backgroundColor: corStatusCandidatura(statusCandidatura),
-                    )
-                : ElevatedButton.icon(
-                    onPressed: vagaId == null ? null : () => confirmarCandidatura(vaga),
-                    icon: const Icon(Icons.send),
-                    label: const Text('Candidatar-se'),
-                    ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Ver detalhes em construção')),
+                    );
+                  },
+                  child: const Text('Ver detalhes'),
+                ),
+                const SizedBox(width: 8),
+                jaCandidatou
+                    ? Chip(
+                        avatar: Icon(
+                          iconeStatusCandidatura(statusCandidatura),
+                          size: 18,
+                        ),
+                        label: Text(
+                          labelStatusCandidatura(statusCandidatura),
+                        ),
+                        backgroundColor: corStatusCandidatura(statusCandidatura),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: vagaId == null
+                            ? null
+                            : () => confirmarCandidatura(vaga),
+                        icon: const Icon(Icons.send, size: 18),
+                        label: const Text('Candidatar-se'),
+                      ),
+              ],
             ),
           ],
         ),

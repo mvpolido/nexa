@@ -41,7 +41,7 @@ export class VagaController {
       const empresaRepository = AppDataSource.getRepository(Empresa);
 
       const empresa = await empresaRepository.findOne({
-        where: { id: usuarioLogadoId },
+        where: { usuario: { id: usuarioLogadoId } }, // Busca a empresa que PERTENCE a esse usuário
       });
 
       if (!empresa) {
@@ -81,20 +81,31 @@ export class VagaController {
       const perfilLogado = (req as any).usuarioPerfil;
 
       const vagaRepository = AppDataSource.getRepository(Vaga);
+      const empresaRepository = AppDataSource.getRepository(Empresa); 
 
+      // 1. Lógica para a EMPRESA (vê apenas as próprias vagas)
       if (perfilLogado === UsuarioPerfil.EMPRESA) {
+        const empresa = await empresaRepository.findOne({
+          where: { usuario: { id: usuarioLogadoId } }, // Busca a empresa que PERTENCE a esse usuário
+        });
+
+        if (!empresa) {
+          return res.status(404).json({ message: "Perfil de empresa não encontrado." });
+        }
+
         const vagas = await vagaRepository.find({
-          where: { empresa_id: usuarioLogadoId },
-          relations: ["empresa", "empresa.usuario"],
+          where: { empresa_id: empresa.id }, 
+          relations: ["empresa"], 
           order: { criado_em: "DESC" },
         });
 
         return res.status(200).json(vagas);
       }
 
+      // 2. Lógica para o ALUNO (vê todas as vagas ativas para a Home)
       const vagas = await vagaRepository.find({
         where: { ativo: 1 },
-        relations: ["empresa", "empresa.usuario"],
+        relations: ["empresa"], 
         order: { criado_em: "DESC" },
       });
 
@@ -117,28 +128,29 @@ export class VagaController {
 
       const vaga = await vagaRepository.findOne({
         where: { id: Number(id) },
-        relations: ["empresa", "empresa.usuario"],
+        relations: ["empresa"], // REMOVIDO "empresa.usuario" por segurança
       });
 
       if (!vaga) {
-        return res.status(404).json({
-          message: "Vaga não encontrada.",
-        });
+        return res.status(404).json({ message: "Vaga não encontrada." });
       }
 
       if (perfilLogado === UsuarioPerfil.ALUNO && vaga.ativo !== 1) {
-        return res.status(404).json({
-          message: "Vaga não encontrada.",
-        });
+        return res.status(404).json({ message: "Vaga não encontrada." });
       }
 
-      if (
-        perfilLogado === UsuarioPerfil.EMPRESA &&
-        vaga.empresa_id !== usuarioLogadoId
-      ) {
-        return res.status(403).json({
-          message: "Você só pode acessar vagas da sua própria empresa.",
+      
+      if (perfilLogado === UsuarioPerfil.EMPRESA) {
+        const empresaRepository = AppDataSource.getRepository(Empresa);
+        const empresa = await empresaRepository.findOne({
+          where: { usuario: { id: usuarioLogadoId } },
         });
+
+        if (!empresa || vaga.empresa_id !== empresa.id) {
+          return res.status(403).json({
+            message: "Você só pode acessar vagas da sua própria empresa.",
+          });
+        }
       }
 
       return res.status(200).json(vaga);
@@ -174,7 +186,13 @@ export class VagaController {
         });
       }
 
-      if (vaga.empresa_id !== usuarioLogadoId) {
+      // CORREÇÃO: Busca a empresa do usuário logado antes de comparar
+      const empresaRepository = AppDataSource.getRepository(Empresa);
+      const empresa = await empresaRepository.findOne({
+        where: { usuario: { id: usuarioLogadoId } },
+      });
+
+      if (!empresa || vaga.empresa_id !== empresa.id) {
         return res.status(403).json({
           message: "Você só pode editar vagas da sua própria empresa.",
         });
@@ -247,7 +265,13 @@ export class VagaController {
         });
       }
 
-      if (vaga.empresa_id !== usuarioLogadoId) {
+      // CORREÇÃO: Busca a empresa do usuário logado antes de comparar
+      const empresaRepository = AppDataSource.getRepository(Empresa);
+      const empresa = await empresaRepository.findOne({
+        where: { usuario: { id: usuarioLogadoId } },
+      });
+
+      if (!empresa || vaga.empresa_id !== empresa.id) {
         return res.status(403).json({
           message: "Você só pode arquivar vagas da sua própria empresa.",
         });
@@ -299,7 +323,13 @@ export class VagaController {
         });
       }
 
-      if (vaga.empresa_id !== usuarioLogadoId) {
+      // CORREÇÃO: Busca a empresa do usuário logado antes de comparar
+      const empresaRepository = AppDataSource.getRepository(Empresa);
+      const empresa = await empresaRepository.findOne({
+        where: { usuario: { id: usuarioLogadoId } },
+      });
+
+      if (!empresa || vaga.empresa_id !== empresa.id) {
         return res.status(403).json({
           message: "Você só pode desarquivar vagas da sua própria empresa.",
         });
