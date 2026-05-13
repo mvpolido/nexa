@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/skill_selector.dart';
 
 import '../config/api_config.dart';
 
@@ -21,6 +22,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   int selectedMenuIndex = 0;
 
   List<dynamic> vagas = [];
+  List<dynamic> habilidadesDisponiveis = [];
 
   @override
   void initState() {
@@ -40,7 +42,10 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       return;
     }
 
-    await carregarVagas();
+    await Future.wait([
+        carregarHabilidades(),
+        carregarVagas(),
+    ]);
   }
 
   bool vagaArquivada(dynamic vaga) {
@@ -54,6 +59,27 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   List<dynamic> get vagasArquivadas {
     return vagas.where((vaga) => vagaArquivada(vaga)).toList();
   }
+
+    Future<void> carregarHabilidades() async {
+    try {
+        final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/habilidades'),
+        headers: {
+            'Authorization': 'Bearer $token',
+        },
+        );
+
+        if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data is List) {
+            habilidadesDisponiveis = data;
+        }
+        }
+    } catch (_) {
+        // A tela continua funcionando, mas sem chips.
+    }
+    }
 
   Future<void> carregarVagas() async {
     setState(() {
@@ -133,6 +159,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       modalidade = 'REMOTO';
     }
 
+    Set<int> habilidadeIdsSelecionadas =
+    editando ? habilidadeIdsDaVaga(vaga) : <int>{};
+
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
@@ -142,7 +171,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            Future<void> salvar() async {
+    Future<void> salvar() async {
               if (!(formKey.currentState?.validate() ?? false)) return;
 
               setDialogState(() {
@@ -151,11 +180,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
               try {
                 final body = jsonEncode({
-                  'titulo': tituloController.text.trim(),
-                  'descricao': descricaoController.text.trim(),
-                  'requisitos': requisitosController.text.trim(),
-                  'modalidade': modalidade,
-                  'habilidades': [],
+                'titulo': tituloController.text.trim(),
+                'descricao': descricaoController.text.trim(),
+                'requisitos': requisitosController.text.trim(),
+                'modalidade': modalidade,
+                'habilidadeIds': habilidadeIdsSelecionadas.toList(),
                 });
 
                 final response = editando
@@ -280,33 +309,44 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: modalidade,
-                          decoration: const InputDecoration(
-                            labelText: 'Modalidade',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'REMOTO',
-                              child: Text('Remoto'),
+                              value: modalidade,
+                            decoration: const InputDecoration(
+                                labelText: 'Modalidade',
+                                border: OutlineInputBorder(),
                             ),
-                            DropdownMenuItem(
-                              value: 'PRESENCIAL',
-                              child: Text('Presencial'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'HIBRIDO',
-                              child: Text('Híbrido'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
+                            items: const [
+                                DropdownMenuItem(
+                                value: 'REMOTO',
+                                child: Text('Remoto'),
+                                ),
+                                DropdownMenuItem(
+                                value: 'PRESENCIAL',
+                                child: Text('Presencial'),
+                                ),
+                                DropdownMenuItem(
+                                value: 'HIBRIDO',
+                                child: Text('Híbrido'),
+                                ),
+                            ],
+                            onChanged: (value) {
+                                if (value == null) return;
 
-                            setDialogState(() {
-                              modalidade = value;
-                            });
-                          },
-                        ),
+                                setDialogState(() {
+                                modalidade = value;
+                                });
+                            },
+                            ),
+                            const SizedBox(height: 16),
+                            SkillSelector(
+                            title: 'Habilidades exigidas pela vaga',
+                            habilidades: habilidadesDisponiveis,
+                            selectedIds: habilidadeIdsSelecionadas,
+                            onChanged: (updated) {
+                                setDialogState(() {
+                                habilidadeIdsSelecionadas = updated;
+                                });
+                            },
+                            ),
                       ],
                     ),
                   ),
@@ -719,6 +759,57 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     );
     }
 
+    List<dynamic> habilidadesDaVaga(dynamic vaga) {
+  final relacoes = vaga['vagaHabilidades'];
+
+  if (relacoes is List) {
+    return relacoes
+        .map((relacao) => relacao['habilidade'])
+        .where((habilidade) => habilidade != null)
+        .toList();
+  }
+
+  final legado = vaga['habilidades'];
+
+  if (legado is List) {
+    return legado
+        .map((nome) => {
+              'id': null,
+              'nome': nome.toString(),
+            })
+        .toList();
+  }
+
+  return [];
+}
+
+Set<int> habilidadeIdsDaVaga(dynamic vaga) {
+  return habilidadesDaVaga(vaga)
+      .where((habilidade) => habilidade['id'] is int)
+      .map<int>((habilidade) => habilidade['id'] as int)
+      .toSet();
+}
+
+    Widget chipsHabilidades(List<dynamic> habilidades) {
+    if (habilidades.isEmpty) {
+        return const Text(
+        'Nenhuma habilidade selecionada.',
+        style: TextStyle(fontStyle: FontStyle.italic),
+        );
+    }
+
+    return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: habilidades.map((habilidade) {
+        return Chip(
+            avatar: const Icon(Icons.label_outline, size: 18),
+            label: Text(habilidade['nome'] ?? 'Sem nome'),
+        );
+        }).toList(),
+    );
+    }
+
   Widget cardVaga(dynamic vaga) {
     final bool arquivada = vagaArquivada(vaga);
 
@@ -760,6 +851,14 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                   ),
                 ],
               ),
+                const SizedBox(height: 12),
+                const Text(
+                'Habilidades exigidas',
+                style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                chipsHabilidades(habilidadesDaVaga(vaga)),
+
               if ((vaga['requisitos'] ?? '').toString().isNotEmpty) ...[
                 const SizedBox(height: 12),
                 const Text(

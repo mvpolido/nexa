@@ -62,14 +62,13 @@ export class CandidaturaController {
         });
       }
 
-      const candidatura = candidaturaRepository.create({
-        aluno_id: aluno.id,
-        vaga_id: vaga.id,
-        status: CandidaturaStatus.PENDENTE,
-        pontuacao_compatibilidade: null,
-      });
+    const novaCandidatura = candidaturaRepository.create({
+      aluno,
+      vaga,
+      status: CandidaturaStatus.PENDENTE,
+    });
 
-      const candidaturaSalva = await candidaturaRepository.save(candidatura);
+      const candidaturaSalva = await candidaturaRepository.save(novaCandidatura);
 
       return res.status(201).json({
         message: "Candidatura realizada com sucesso.",

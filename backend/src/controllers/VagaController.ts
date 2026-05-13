@@ -1,10 +1,66 @@
 import { Request, Response } from "express";
+import { In } from "typeorm";
 import { AppDataSource } from "../data-source";
 import { Vaga, VagaModalidade } from "../entities/Vaga";
 import { Empresa } from "../entities/Empresa";
 import { UsuarioPerfil } from "../entities/Usuario";
+import { Habilidade } from "../entities/Habilidade";
+import { VagaHabilidade } from "../entities/VagaHabilidade";
 
 export class VagaController {
+  private static async sincronizarHabilidadesDaVaga(
+    vagaId: number,
+    habilidadeIds: number[]
+  ) {
+    const habilidadeRepository = AppDataSource.getRepository(Habilidade);
+    const vagaHabilidadeRepository = AppDataSource.getRepository(VagaHabilidade);
+
+    const ids = habilidadeIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    const habilidades = ids.length
+      ? await habilidadeRepository.find({
+          where: { id: In(ids) },
+        })
+      : [];
+
+    if (habilidades.length !== ids.length) {
+      throw new Error("Uma ou mais habilidades informadas não existem.");
+    }
+
+    await vagaHabilidadeRepository.delete({
+      vaga_id: vagaId,
+    });
+
+    if (ids.length > 0) {
+      const novasRelacoes = ids.map((habilidadeId) =>
+        vagaHabilidadeRepository.create({
+          vaga_id: vagaId,
+          habilidade_id: habilidadeId,
+        })
+      );
+
+      await vagaHabilidadeRepository.save(novasRelacoes);
+    }
+
+    return habilidades;
+  }
+
+  private static async buscarVagaCompleta(vagaId: number) {
+    const vagaRepository = AppDataSource.getRepository(Vaga);
+
+    return vagaRepository.findOne({
+      where: { id: vagaId },
+      relations: [
+        "empresa",
+        "empresa.usuario",
+        "vagaHabilidades",
+        "vagaHabilidades.habilidade",
+      ],
+    });
+  }
+
   static async create(req: Request, res: Response) {
     try {
       const {
@@ -14,7 +70,7 @@ export class VagaController {
         modalidade,
         latitude,
         longitude,
-        habilidades,
+        habilidadeIds,
       } = req.body;
 
       const usuarioLogadoId = (req as any).usuarioId;
@@ -35,6 +91,12 @@ export class VagaController {
       if (!Object.values(VagaModalidade).includes(modalidade)) {
         return res.status(400).json({
           message: "Modalidade inválida.",
+        });
+      }
+
+      if (habilidadeIds !== undefined && !Array.isArray(habilidadeIds)) {
+        return res.status(400).json({
+          message: "O campo habilidadeIds deve ser um array.",
         });
       }
 
@@ -60,17 +122,33 @@ export class VagaController {
         modalidade,
         latitude: latitude ?? empresa.latitude ?? null,
         longitude: longitude ?? empresa.longitude ?? null,
-        habilidades: Array.isArray(habilidades) ? habilidades : [],
+        habilidades: [],
         ativo: 1,
       });
 
       const vagaSalva = await vagaRepository.save(novaVaga);
 
-      return res.status(201).json(vagaSalva);
+      const habilidades = await VagaController.sincronizarHabilidadesDaVaga(
+        vagaSalva.id,
+        Array.isArray(habilidadeIds) ? habilidadeIds : []
+      );
+
+      vagaSalva.habilidades = habilidades.map((habilidade) => habilidade.nome);
+      await vagaRepository.save(vagaSalva);
+
+      const vagaCompleta = await VagaController.buscarVagaCompleta(vagaSalva.id);
+
+      return res.status(201).json(vagaCompleta);
     } catch (error: any) {
+      const message = error.message || "Erro ao criar vaga.";
+
+      if (message.includes("habilidades")) {
+        return res.status(400).json({ message });
+      }
+
       return res.status(500).json({
         message: "Erro ao criar vaga.",
-        error: error.message,
+        error: message,
       });
     }
   }
@@ -85,7 +163,12 @@ export class VagaController {
       if (perfilLogado === UsuarioPerfil.EMPRESA) {
         const vagas = await vagaRepository.find({
           where: { empresa_id: usuarioLogadoId },
-          relations: ["empresa", "empresa.usuario"],
+          relations: [
+            "empresa",
+            "empresa.usuario",
+            "vagaHabilidades",
+            "vagaHabilidades.habilidade",
+          ],
           order: { criado_em: "DESC" },
         });
 
@@ -94,7 +177,12 @@ export class VagaController {
 
       const vagas = await vagaRepository.find({
         where: { ativo: 1 },
-        relations: ["empresa", "empresa.usuario"],
+        relations: [
+          "empresa",
+          "empresa.usuario",
+          "vagaHabilidades",
+          "vagaHabilidades.habilidade",
+        ],
         order: { criado_em: "DESC" },
       });
 
@@ -113,12 +201,7 @@ export class VagaController {
       const usuarioLogadoId = (req as any).usuarioId;
       const perfilLogado = (req as any).usuarioPerfil;
 
-      const vagaRepository = AppDataSource.getRepository(Vaga);
-
-      const vaga = await vagaRepository.findOne({
-        where: { id: Number(id) },
-        relations: ["empresa", "empresa.usuario"],
-      });
+      const vaga = await VagaController.buscarVagaCompleta(Number(id));
 
       if (!vaga) {
         return res.status(404).json({
@@ -193,12 +276,18 @@ export class VagaController {
         modalidade,
         latitude,
         longitude,
-        habilidades,
+        habilidadeIds,
       } = req.body;
 
       if (modalidade && !Object.values(VagaModalidade).includes(modalidade)) {
         return res.status(400).json({
           message: "Modalidade inválida.",
+        });
+      }
+
+      if (habilidadeIds !== undefined && !Array.isArray(habilidadeIds)) {
+        return res.status(400).json({
+          message: "O campo habilidadeIds deve ser um array.",
         });
       }
 
@@ -208,17 +297,37 @@ export class VagaController {
       vaga.modalidade = modalidade ?? vaga.modalidade;
       vaga.latitude = latitude ?? vaga.latitude;
       vaga.longitude = longitude ?? vaga.longitude;
-      vaga.habilidades = Array.isArray(habilidades)
-        ? habilidades
-        : vaga.habilidades;
 
       const vagaAtualizada = await vagaRepository.save(vaga);
 
-      return res.status(200).json(vagaAtualizada);
+      if (Array.isArray(habilidadeIds)) {
+        const habilidades = await VagaController.sincronizarHabilidadesDaVaga(
+          vagaAtualizada.id,
+          habilidadeIds
+        );
+
+        vagaAtualizada.habilidades = habilidades.map(
+          (habilidade) => habilidade.nome
+        );
+
+        await vagaRepository.save(vagaAtualizada);
+      }
+
+      const vagaCompleta = await VagaController.buscarVagaCompleta(
+        vagaAtualizada.id
+      );
+
+      return res.status(200).json(vagaCompleta);
     } catch (error: any) {
+      const message = error.message || "Erro ao atualizar vaga.";
+
+      if (message.includes("habilidades")) {
+        return res.status(400).json({ message });
+      }
+
       return res.status(500).json({
         message: "Erro ao atualizar vaga.",
-        error: error.message,
+        error: message,
       });
     }
   }
