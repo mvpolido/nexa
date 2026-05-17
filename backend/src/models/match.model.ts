@@ -3,5 +3,5 @@ export interface VagaMatchResponse {
   titulo: string;
   total_habilidades_vaga: number;
   habilidades_em_comum: number;
-  porcentagem_match: number;
+  match_percent: number;
 }
