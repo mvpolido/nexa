@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
-import 'pages/vaga_detalhes_page.dart'; // Importe o novo arquivo
-
+import 'pages/vaga_detalhes_page.dart'; 
+import 'screens/auth/auth_selection_screen.dart'; 
 
 void main() {
   runApp(const NexaApp());
@@ -54,9 +54,10 @@ class NexaApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AuthSelectionScreen(),
+      initialRoute: '/welcome',
       routes: {
-        '/': (context) => const LoginPage(),
+        '/welcome': (context) => const AuthSelectionScreen(), 
+        '/': (context) => const LoginPage(),                  
         '/register': (context) => const RegisterPage(),
         '/home': (context) => const HomePage(),
         '/vaga-detalhes': (context) => const VagaDetalhesPage(),

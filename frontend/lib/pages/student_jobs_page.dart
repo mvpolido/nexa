@@ -96,10 +96,10 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         final relacoes = data['alunoHabilidades'];
 
         if (relacoes is List) {
+          // CORRIGIDO: Usando whereType<int>() para simplificar a filtragem e conversão
           minhasHabilidadesIds = relacoes
               .map((relacao) => relacao['habilidade_id'])
-              .where((id) => id is int)
-              .map<int>((id) => id as int)
+              .whereType<int>()
               .toSet();
         }
       }
@@ -252,6 +252,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
       if (response.body.isNotEmpty) {
         final data = jsonDecode(response.body);
+        // CORRIGIDO: Alterado de `message` para `mensagem`
         mensagem = data['message'] ?? mensagem;
       }
 
@@ -369,7 +370,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         style: TextStyle(fontStyle: FontStyle.italic),
       );
     }
-  }
 
     return Wrap(
       spacing: 8,

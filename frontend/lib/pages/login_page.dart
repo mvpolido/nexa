@@ -87,63 +87,146 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Login'),
-        centerTitle: true,
+    const primaryColor = Color(0xFF7C3AED); // Roxo Nexa
+
+    // Estilo padrão para os inputs externos (InputDecoration)
+    final inputDecorationTemplate = InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFFF9FAFB),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
       ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: primaryColor, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.red, width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.red, width: 2),
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
+            constraints: const BoxConstraints(maxWidth: 450),
             child: Form(
               key: _formKey,
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Logo do Nexa centralizada
+                  Image.asset(
+                    'assets/images/logonexa.png',
+                    height: 64,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.flutter_dash, size: 64, color: primaryColor);
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  
+                  // Título Principal
                   const Text(
-                    'Entrar no Nexa',
+                    'Entrar',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1F2937),
+                      fontFamily: 'Inter',
                     ),
                   ),
                   const SizedBox(height: 8),
+                  
+                  // Subtítulo
                   const Text(
-                    'Faça login para continuar',
+                    'Acesse sua conta',
                     textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Color(0xFF6B7280),
+                      fontFamily: 'Inter',
+                    ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 40),
+
+                  // Label E-mail
+                  const Text(
+                    'E-mail',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF374151),
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
+                    style: const TextStyle(fontSize: 15, fontFamily: 'Inter'),
+                    decoration: InputDecoration(
+                      hintText: 'seu@email.com',
+                      prefixIcon: const Icon(Icons.mail_outline, size: 22),
+                      filled: inputDecorationTemplate.filled,
+                      fillColor: inputDecorationTemplate.fillColor,
+                      contentPadding: inputDecorationTemplate.contentPadding,
+                      border: inputDecorationTemplate.border,
+                      enabledBorder: inputDecorationTemplate.enabledBorder,
+                      focusedBorder: inputDecorationTemplate.focusedBorder,
+                      errorBorder: inputDecorationTemplate.errorBorder,
+                      focusedErrorBorder: inputDecorationTemplate.focusedErrorBorder,
                     ),
                     validator: (value) {
                       final email = value?.trim() ?? '';
-
-                      if (email.isEmpty) {
-                        return 'Informe o email';
-                      }
-
-                      if (!email.contains('@')) {
-                        return 'Informe um email válido';
-                      }
-
+                      if (email.isEmpty) return 'Informe o e-mail';
+                      if (!email.contains('@')) return 'Informe um e-mail válido';
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
+
+                  // Label Senha
+                  const Text(
+                    'Senha',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF374151),
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
+                    style: const TextStyle(fontSize: 15, fontFamily: 'Inter'),
                     decoration: InputDecoration(
-                      labelText: 'Senha',
-                      border: const OutlineInputBorder(),
+                      hintText: '••••••••',
+                      prefixIcon: const Icon(Icons.lock_outline, size: 22),
+                      filled: inputDecorationTemplate.filled,
+                      fillColor: inputDecorationTemplate.fillColor,
+                      contentPadding: inputDecorationTemplate.contentPadding,
+                      border: inputDecorationTemplate.border,
+                      enabledBorder: inputDecorationTemplate.enabledBorder,
+                      focusedBorder: inputDecorationTemplate.focusedBorder,
+                      errorBorder: inputDecorationTemplate.errorBorder,
+                      focusedErrorBorder: inputDecorationTemplate.focusedErrorBorder,
                       suffixIcon: IconButton(
                         onPressed: () {
                           setState(() {
@@ -152,53 +235,106 @@ class _LoginPageState extends State<LoginPage> {
                         },
                         icon: Icon(
                           _obscurePassword
-                              ? Icons.visibility
-                              : Icons.visibility_off,
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          size: 22,
                         ),
                       ),
                     ),
                     validator: (value) {
                       final password = value ?? '';
-
-                      if (password.isEmpty) {
-                        return 'Informe a senha';
-                      }
-
-                      if (password.length < 6) {
-                        return 'A senha deve ter pelo menos 6 caracteres';
-                      }
-
+                      if (password.isEmpty) return 'Informe a senha';
+                      if (password.length < 6) return 'A senha deve ter pelo menos 6 caracteres';
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
-                  if (_errorMessage != null) ...[
-                    Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
+                  
+                  // Link Esqueci minha senha
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {},
+                      style: TextButton.styleFrom(
+                        foregroundColor: primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      child: const Text(
+                        'Esqueci minha senha',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, fontFamily: 'Inter'),
+                      ),
                     ),
-                    const SizedBox(height: 16),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Bloco de Feedback de Erro
+                  if (_errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w500, fontFamily: 'Inter'),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                   ],
+
+                  // Botão Entrar
                   SizedBox(
-                    height: 48,
+                    height: 56,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Inter'),
+                      ),
                       child: _isLoading
                           ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
                             )
                           : const Text('Entrar'),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pushReplacementNamed('/register');
-                    },
-                    child: const Text('Ainda não tenho conta'),
+                  const SizedBox(height: 32),
+
+                  // Footer Cadastre-se
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Não tem conta? ',
+                        style: TextStyle(color: Color(0xFF6B7280), fontSize: 14, fontFamily: 'Inter'),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).pushReplacementNamed('/register');
+                        },
+                        child: const Text(
+                          'Cadastre-se',
+                          style: TextStyle(
+                            color: primaryColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

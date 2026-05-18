@@ -1,0 +1,117 @@
+.
+├── backend
+│   ├── Currículo.pdf
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── src
+│   │   ├── config
+│   │   │   └── multer.ts
+│   │   ├── controllers
+│   │   │   ├── AlunoController.ts
+│   │   │   ├── CandidaturaController.ts
+│   │   │   ├── EmpresaController.ts
+│   │   │   ├── HabilidadeController.ts
+│   │   │   ├── PerfilController.ts
+│   │   │   ├── UserController.ts
+│   │   │   └── VagaController.ts
+│   │   ├── data-source.ts
+│   │   ├── entities
+│   │   │   ├── AlunoHabilidade.ts
+│   │   │   ├── Aluno.ts
+│   │   │   ├── Avaliacao.ts
+│   │   │   ├── Candidatura.ts
+│   │   │   ├── Empresa.ts
+│   │   │   ├── Habilidade.ts
+│   │   │   ├── Mensagem.ts
+│   │   │   ├── Usuario.ts
+│   │   │   ├── VagaHabilidade.ts
+│   │   │   └── Vaga.ts
+│   │   ├── index.ts
+│   │   ├── middleware
+│   │   │   └── auth.ts
+│   │   ├── middlewares
+│   │   │   └── authMiddleware.ts
+│   │   ├── models
+│   │   │   ├── aluno.model.ts
+│   │   │   ├── avaliacao.model.ts
+│   │   │   ├── candidatura.model.ts
+│   │   │   ├── empresa.model.ts
+│   │   │   ├── habilidade.model.ts
+│   │   │   ├── mensagem.model.ts
+│   │   │   ├── usuario.model.ts
+│   │   │   └── vaga.model.ts
+│   │   ├── routes
+│   │   │   ├── aluno.routes.ts
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── candidatura.routes.ts
+│   │   │   ├── empresa.routes.ts
+│   │   │   ├── habilidade.routes.ts
+│   │   │   ├── health.routes.ts
+│   │   │   ├── user.routes.ts
+│   │   │   └── vaga.routes.ts
+│   │   ├── seed.ts
+│   │   ├── swagger.ts
+│   │   └── utils
+│   │       └── validators.ts
+│   ├── tsconfig.json
+│   ├── uploads
+│   │   └── curriculos
+│   │       ├── a57e9269-7922-4a2c-9042-cb129805ce8e_2026-05-04_CurrÃ­culo.pdf
+│   │       └── affb46e9-0529-409c-93b1-1c4d221d9b89_2026-05-04_CurrÃ­culo.pdf
+│   └── yarn.lock
+├── docker-compose.yml
+├── estrutura_projeto.txt
+├── frontend
+│   ├── analysis_options.yaml
+│   ├── assets
+│   │   └── images
+│   │       └── logonexa.png
+│   ├── Dockerfile
+│   ├── lib
+│   │   ├── config
+│   │   │   └── api_config.dart
+│   │   ├── main.dart
+│   │   ├── models
+│   │   │   ├── student_profile_model.dart
+│   │   │   └── vaga_model.dart
+│   │   ├── pages
+│   │   │   ├── company_dashboard_page.dart
+│   │   │   ├── home_page.dart
+│   │   │   ├── login_page.dart
+│   │   │   ├── register_page.dart
+│   │   │   ├── student_jobs_page.dart
+│   │   │   ├── student_jobs_page.dart.bak
+│   │   │   └── vaga_detalhes_page.dart
+│   │   ├── screens
+│   │   │   ├── auth
+│   │   │   │   ├── auth_selection_screen.dart
+│   │   │   │   ├── company_signup_screen.dart
+│   │   │   │   ├── login_screen.dart
+│   │   │   │   ├── student_signup_step1_screen.dart
+│   │   │   │   ├── student_signup_step2_screen.dart
+│   │   │   │   └── student_signup_step3_screen.dart
+│   │   │   └── student_profile_screen.dart
+│   │   ├── services
+│   │   │   ├── student_api_service.dart
+│   │   │   └── vaga_service.dart
+│   │   └── widgets
+│   │       └── skill_selector.dart
+│   ├── pubspec.lock
+│   ├── pubspec.yaml
+│   ├── README.md
+│   ├── test
+│   │   └── widget_test.dart
+│   └── web
+│       ├── favicon.png
+│       ├── icons
+│       │   ├── Icon-192.png
+│       │   ├── Icon-512.png
+│       │   ├── Icon-maskable-192.png
+│       │   └── Icon-maskable-512.png
+│       ├── index.html
+│       └── manifest.json
+├── LICENSE
+└── README.md
+
+27 directories, 88 files
