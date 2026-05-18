@@ -179,6 +179,11 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
           minhasHabilidadesIds = habilidadeIds;
         });
 
+        await carregarVagas();
+        if (mounted) {
+          setState(() {});
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Habilidades updated com sucesso.'),
@@ -433,6 +438,24 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     }
   }
 
+  double? matchPercent(dynamic item) {
+    final value = item['match_percent'] ?? item['pontuacao_compatibilidade'];
+
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+
+    return null;
+  }
+
+  Widget chipMatch(double? match) {
+    if (match == null) return const SizedBox.shrink();
+
+    return Chip(
+      avatar: const Icon(Icons.insights, size: 18),
+      label: Text('${match.round()}% match'),
+    );
+  }
+
   List<dynamic> habilidadesDaVaga(dynamic vaga) {
     final relacoes = vaga['vagaHabilidades'];
 
@@ -509,6 +532,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
     final bool jaCandidatou = statusCandidatura != null;
     final habilidades = habilidadesDaVaga(vaga);
+    final match = matchPercent(vaga);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -539,6 +563,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                   label: Text(vaga['modalidade'] ?? '-'),
                   avatar: const Icon(Icons.work_outline, size: 18),
                 ),
+                chipMatch(match),
               ],
             ),
             const SizedBox(height: 12),
