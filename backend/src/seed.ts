@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import bcrypt from "bcrypt";
 import { AppDataSource } from "./data-source";
 import { Usuario, UsuarioPerfil } from "./entities/Usuario";
 import { Aluno } from "./entities/Aluno";
@@ -35,7 +36,7 @@ async function runSeed() {
 
     const aluno1 = new Usuario();
     aluno1.email = "aluno@gmail.com";
-    aluno1.senha_hash = "123456";
+    aluno1.senha_hash = await bcrypt.hash("123456", 10);
     aluno1.nome_exibicao = "Aluno Silva";
     aluno1.perfil = UsuarioPerfil.ALUNO;
     await usuarioRepository.save(aluno1);
@@ -43,7 +44,7 @@ async function runSeed() {
 
     const aluno2 = new Usuario();
     aluno2.email = "maria@example.com";
-    aluno2.senha_hash = "hashed_password_2";
+    aluno2.senha_hash = await bcrypt.hash("senha123", 10);
     aluno2.nome_exibicao = "Maria Santos";
     aluno2.perfil = UsuarioPerfil.ALUNO;
     await usuarioRepository.save(aluno2);
@@ -51,7 +52,7 @@ async function runSeed() {
 
     const empresa1User = new Usuario();
     empresa1User.email = "empresa@gmail.com";
-    empresa1User.senha_hash = "123456";
+    empresa1User.senha_hash = await bcrypt.hash("123456", 10);
     empresa1User.nome_exibicao = "TechCorp RH";
     empresa1User.perfil = UsuarioPerfil.EMPRESA;
     await usuarioRepository.save(empresa1User);
@@ -59,7 +60,7 @@ async function runSeed() {
 
     const empresa2User = new Usuario();
     empresa2User.email = "contato@startup.com";
-    empresa2User.senha_hash = "hashed_password_4";
+    empresa2User.senha_hash = await bcrypt.hash("senha123", 10);
     empresa2User.nome_exibicao = "StartupXYZ";
     empresa2User.perfil = UsuarioPerfil.EMPRESA;
     await usuarioRepository.save(empresa2User);
