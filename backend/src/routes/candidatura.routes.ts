@@ -2,12 +2,14 @@ import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { CandidaturaController } from "../controllers/CandidaturaController";
 import { AlunoController } from "../controllers/AlunoController";
+import { uploadConfig } from "../config/multer"; // NOVO: Importa o multer configurado
 
 const router = Router();
 
 router.post(
   "/vagas/:id/candidatar",
   authMiddleware,
+  uploadConfig.single("curriculo"), // NOVO: Intercepta o upload do PDF (campo 'curriculo')
   CandidaturaController.candidatar
 );
 

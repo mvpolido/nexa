@@ -16,11 +16,15 @@ import { empresaRoutes } from './routes/empresa.routes';
 import candidaturaRoutes from './routes/candidatura.routes';
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: '*', 
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true
+}));
 app.use(express.json());
 
-// 👈 2. Configuração para servir arquivos estáticos
-// Agora, qualquer arquivo em /uploads será acessível via http://localhost:3000/files
+
 app.use('/files', express.static(path.resolve(__dirname, '..', 'uploads')));
 
 app.use('/empresas', empresaRoutes);

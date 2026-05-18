@@ -1,9 +1,9 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart'; // 👈 Importante para definir o tipo do arquivo na Web
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:file_picker/file_picker.dart';
 import '../config/api_config.dart';
 import '../widgets/skill_selector.dart';
 
@@ -181,7 +181,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Habilidades atualizadas com sucesso.'),
+            content: Text('Habilidades updated com sucesso.'),
           ),
         );
       } else {
@@ -212,48 +212,132 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   }
 
   Future<void> confirmarCandidatura(dynamic vaga) async {
+    PlatformFile? arquivoSelecionado;
+
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Confirmar candidatura'),
-          content: Text(
-            'Deseja realmente se candidatar para a vaga "${vaga['titulo'] ?? 'Sem título'}"?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Confirmar'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Confirmar candidatura'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Deseja realmente se candidatar para a vaga "${vaga['titulo'] ?? 'Sem título'}"?',
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Deseja enviar seu currículo junto?',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  
+                  if (arquivoSelecionado == null)
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        FilePickerResult? result = await FilePicker.pickFiles(
+                          type: FileType.custom,
+                          allowedExtensions: ['pdf'],
+                          withData: true,
+                        );
+
+                        if (result != null && result.files.first.bytes != null) {
+                          final arquivoValido = result.files.first;
+                          
+                          setDialogState(() {
+                            arquivoSelecionado = arquivoValido;
+                          });
+
+                          setState(() {
+                            arquivoSelecionado = arquivoValido;
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.attach_file),
+                      label: const Text('Anexar Currículo (PDF)'),
+                    )
+                  else
+                    Card(
+                      color: Colors.blue.shade50,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.picture_as_pdf, color: Colors.red),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                arquivoSelecionado!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () {
+                                setDialogState(() {
+                                  arquivoSelecionado = null;
+                                });
+                                setState(() {
+                                  arquivoSelecionado = null;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Confirmar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
 
     if (confirmar == true) {
-      await candidatar(vaga['id']);
+      await candidatar(vaga['id'], arquivoSelecionado);
     }
   }
 
-  Future<void> candidatar(int vagaId) async {
+  Future<void> candidatar(int vagaId, PlatformFile? arquivo) async {
     try {
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId/candidatar'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
-      );
+      final uri = Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId/candidatar');
+      final request = http.MultipartRequest('POST', uri);
 
-      String mensagem = 'Erro ao enviar candidatura.';
+      // Cabeçalhos que o Express/CORS precisam validar
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
 
-      if (response.body.isNotEmpty) {
-        final data = jsonDecode(response.body);
-        mensagem = data['message'] ?? mensagem;
+      if (arquivo != null && arquivo.bytes != null) {
+        // Converte os bytes em arquivo multipart compatível com o navegador
+        final multipartFile = http.MultipartFile.fromBytes(
+          'curriculo', // Campo mapeado no Multer do backend
+          arquivo.bytes!,
+          filename: arquivo.name,
+          contentType: MediaType('application', 'pdf'), // Evita problemas de leitura na API
+        );
+        request.files.add(multipartFile);
       }
+
+      // Envia os streams do form-data
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
 
       if (!mounted) return;
 
@@ -266,12 +350,23 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
           const SnackBar(content: Text('Candidatura enviada com sucesso.')),
         );
       } else {
+        String mensagem = 'Erro ao processar candidatura.';
+        if (response.body.isNotEmpty) {
+          try {
+            final data = jsonDecode(response.body);
+            mensagem = data['message'] ?? mensagem;
+          } catch (_) {}
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(mensagem)),
         );
       }
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+
+      print('--- ERRO DETALHADO NO TERMINAL ---');
+      print(e);
+      print('---------------------------------');
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Erro de conexão com o servidor.')),
@@ -369,7 +464,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         style: TextStyle(fontStyle: FontStyle.italic),
       );
     }
-  }
 
     return Wrap(
       spacing: 8,
