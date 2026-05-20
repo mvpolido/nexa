@@ -96,10 +96,10 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         final relacoes = data['alunoHabilidades'];
 
         if (relacoes is List) {
+          // CORRIGIDO: Usando whereType<int>() para simplificar a filtragem e conversão
           minhasHabilidadesIds = relacoes
               .map((relacao) => relacao['habilidade_id'])
-              .where((id) => id is int)
-              .map<int>((id) => id as int)
+              .whereType<int>()
               .toSet();
         }
       }
@@ -186,7 +186,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Habilidades updated com sucesso.'),
+            content: Text('Habilidades atualizadas com sucesso.'),
           ),
         );
       } else {
@@ -346,24 +346,27 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
       if (!mounted) return;
 
+      // --- INÍCIO DA SUA CORREÇÃO DE QA (Extraindo 'mensagem' ou 'message') ---
+      String? mensagemApi;
+      if (response.body.isNotEmpty) {
+        try {
+          final data = jsonDecode(response.body);
+          mensagemApi = data['mensagem'] ?? data['message'];
+        } catch (_) {}
+      }
+      // --- FIM DA CORREÇÃO ---
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         setState(() {
           statusCandidaturasPorVaga[vagaId] = 'PENDENTE';
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Candidatura enviada com sucesso.')),
+          SnackBar(content: Text(mensagemApi ?? 'Candidatura enviada com sucesso.')),
         );
       } else {
-        String mensagem = 'Erro ao processar candidatura.';
-        if (response.body.isNotEmpty) {
-          try {
-            final data = jsonDecode(response.body);
-            mensagem = data['message'] ?? mensagem;
-          } catch (_) {}
-        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagem)),
+          SnackBar(content: Text(mensagemApi ?? 'Erro ao processar candidatura.')),
         );
       }
     } catch (e) {

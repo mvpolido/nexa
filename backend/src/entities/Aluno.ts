@@ -20,6 +20,21 @@ export class Aluno {
   @Column({ type: "varchar", length: 255, nullable: true })
   curso?: string;
 
+  @Column({ type: "varchar", length: 255, nullable: true })
+  instituicao?: string;
+
+  @Column({ type: "int", nullable: true })
+  ano_conclusao?: number;
+
+  @Column({ type: "varchar", length: 9, nullable: true })
+  cep?: string;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  endereco?: string;
+
+  @Column({ type: "varchar", length: 50, nullable: true })
+  numero?: string;
+
   @Column({ type: "varchar", length: 500, nullable: true })
   url_curriculo?: string;
 
