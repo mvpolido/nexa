@@ -6,6 +6,7 @@ import 'pages/register_page.dart';
 import 'pages/vaga_detalhes_page.dart'; 
 import 'screens/auth/auth_selection_screen.dart'; 
 import 'pages/student_profile_page.dart';
+import 'pages/onboarding_page.dart';
 
 void main() {
   runApp(const NexaApp());
@@ -56,8 +57,10 @@ class NexaApp extends StatelessWidget {
           ),
         ),
       ),
-      initialRoute: '/welcome',
+      // AQUI FOI FEITA A ALTERAÇÃO:
+      initialRoute: '/onboarding',
       routes: {
+        '/onboarding': (context) => const OnboardingPage(), 
         '/student-profile': (context) => const StudentProfilePage(),
         '/welcome': (context) => const AuthSelectionScreen(), 
         '/': (context) => const LoginPage(),                  
