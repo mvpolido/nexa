@@ -39,7 +39,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     setState(() {
-      _perfil = perfil;
+      _perfil = perfil?.toLowerCase();
       _isLoading = false;
     });
   }
@@ -56,6 +56,7 @@ class _HomePageState extends State<HomePage> {
       return CompanyDashboardPage();
     }
 
-    return StudentJobsPage();
+    // Retorna a view de aluno limpa
+    return const StudentJobsPage();
   }
 }

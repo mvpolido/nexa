@@ -44,6 +44,36 @@ export class AlunoController {
     }
   }
 
+  // --- NOVO MÉTODO ADICIONADO PARA RESOLVER O ERRO 404 ---
+  static async atualizarPerfil(req: Request, res: Response) {
+    try {
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+
+      if (perfilLogado !== UsuarioPerfil.ALUNO) {
+        return res.status(403).json({ message: "Acesso negado." });
+      }
+
+      const alunoRepository = AppDataSource.getRepository(Aluno);
+      const aluno = await alunoRepository.findOneBy({ id: usuarioLogadoId });
+
+      if (!aluno) {
+        return res.status(404).json({ message: "Perfil não encontrado." });
+      }
+
+      // Atualiza os dados recebidos do frontend
+      alunoRepository.merge(aluno, req.body);
+      await alunoRepository.save(aluno);
+
+      return res.status(200).json({ message: "Perfil atualizado com sucesso!" });
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao atualizar perfil.",
+        error: error.message,
+      });
+    }
+  }
+
   static async atualizarHabilidades(req: Request, res: Response) {
     try {
       const usuarioLogadoId = (req as any).usuarioId;

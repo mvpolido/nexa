@@ -66,7 +66,9 @@ class _LoginPageState extends State<LoginPage> {
           _isLoading = false;
         });
 
+        // Todos os usuários agora vão para a Home
         Navigator.of(context).pushReplacementNamed('/home');
+        
       } else {
         if (!mounted) return;
 
@@ -322,7 +324,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       GestureDetector(
                         onTap: () {
-                          Navigator.of(context).pushReplacementNamed('/register');
+                          Navigator.of(context).pushReplacementNamed('/welcome');
                         },
                         child: const Text(
                           'Cadastre-se',
