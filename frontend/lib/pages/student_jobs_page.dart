@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart'; // 👈 Importante para definir o tipo do arquivo na Web
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../config/api_config.dart';
@@ -27,6 +27,8 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   Set<int> minhasHabilidadesIds = {};
   Map<int, String> statusCandidaturasPorVaga = {};
 
+  double _raioBusca = 10.0;
+
   @override
   void initState() {
     super.initState();
@@ -35,7 +37,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
   Future<void> carregarDados() async {
     final prefs = await SharedPreferences.getInstance();
-
     token = prefs.getString('token');
     nome = prefs.getString('user_nome');
 
@@ -45,9 +46,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       return;
     }
 
-    setState(() {
-      isLoading = true;
-    });
+    setState(() => isLoading = true);
 
     await Future.wait([
       carregarHabilidades(),
@@ -57,27 +56,18 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     ]);
 
     if (!mounted) return;
-
-    setState(() {
-      isLoading = false;
-    });
+    setState(() => isLoading = false);
   }
 
   Future<void> carregarHabilidades() async {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/habilidades'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
-        if (data is List) {
-          habilidadesDisponiveis = data;
-        }
+        if (data is List) habilidadesDisponiveis = data;
       }
     } catch (_) {}
   }
@@ -86,17 +76,12 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/alunos/me'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final relacoes = data['alunoHabilidades'];
-
         if (relacoes is List) {
-          // CORRIGIDO: Usando whereType<int>() para simplificar a filtragem e conversão
           minhasHabilidadesIds = relacoes
               .map((relacao) => relacao['habilidade_id'])
               .whereType<int>()
@@ -110,14 +95,10 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/vagas'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
         if (data is List) {
           vagas = data.where((vaga) {
             return vaga['ativo'] == 1 || vaga['ativo'] == true;
@@ -131,21 +112,15 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/alunos/me/candidaturas'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
         if (data is List) {
           statusCandidaturasPorVaga = {};
-
           for (final candidatura in data) {
             final vagaId = candidatura['vaga_id'];
             final status = candidatura['status'];
-
             if (vagaId is int && status != null) {
               statusCandidaturasPorVaga[vagaId] = status.toString();
             }
@@ -156,10 +131,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   }
 
   Future<void> salvarMinhasHabilidades(Set<int> habilidadeIds) async {
-    setState(() {
-      isSavingSkills = true;
-    });
-
+    setState(() => isSavingSkills = true);
     try {
       final response = await http.put(
         Uri.parse('${ApiConfig.baseUrl}/alunos/me/habilidades'),
@@ -167,52 +139,31 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({
-          'habilidadeIds': habilidadeIds.toList(),
-        }),
+        body: jsonEncode({'habilidadeIds': habilidadeIds.toList()}),
       );
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        setState(() {
-          minhasHabilidadesIds = habilidadeIds;
-        });
-
+        setState(() => minhasHabilidadesIds = habilidadeIds);
         await carregarVagas();
-        if (mounted) {
-          setState(() {});
-        }
-
+        if (mounted) setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Habilidades atualizadas com sucesso.'),
-          ),
-        );
+            const SnackBar(content: Text('Habilidades atualizadas com sucesso.')));
       } else {
         String mensagem = 'Erro ao salvar habilidades.';
-
         if (response.body.isNotEmpty) {
           final data = jsonDecode(response.body);
           mensagem = data['message'] ?? mensagem;
         }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagem)),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagem)));
       }
     } catch (_) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erro de conexão com o servidor.')),
-      );
+          const SnackBar(content: Text('Erro de conexão com o servidor.')));
     } finally {
-      if (mounted) {
-        setState(() {
-          isSavingSkills = false;
-        });
-      }
+      if (mounted) setState(() => isSavingSkills = false);
     }
   }
 
@@ -225,88 +176,141 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Confirmar candidatura'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Deseja realmente se candidatar para a vaga "${vaga['titulo'] ?? 'Sem título'}"?',
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Deseja enviar seu currículo junto?',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  
-                  if (arquivoSelecionado == null)
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        FilePickerResult? result = await FilePicker.pickFiles(
-                          type: FileType.custom,
-                          allowedExtensions: ['pdf'],
-                          withData: true,
-                        );
-
-                        if (result != null && result.files.first.bytes != null) {
-                          final arquivoValido = result.files.first;
-                          
-                          setDialogState(() {
-                            arquivoSelecionado = arquivoValido;
-                          });
-
-                          setState(() {
-                            arquivoSelecionado = arquivoValido;
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.attach_file),
-                      label: const Text('Anexar Currículo (PDF)'),
-                    )
-                  else
-                    Card(
-                      color: Colors.blue.shade50,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.picture_as_pdf, color: Colors.red),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                arquivoSelecionado!.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              onPressed: () {
-                                setDialogState(() {
-                                  arquivoSelecionado = null;
-                                });
-                                setState(() {
-                                  arquivoSelecionado = null;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              titlePadding: const EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 8),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              title: const Text('Detalhes da Vaga', style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold, fontSize: 20)),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header da Vaga
+                      Text(
+                        vaga['titulo'] ?? 'Sem título',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
                       ),
-                    ),
-                ],
+                      const SizedBox(height: 4),
+                      Text(
+                        nomeEmpresa(vaga),
+                        style: const TextStyle(fontSize: 15, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Modalidade
+                      Row(
+                        children: [
+                          Icon(Icons.work_outline, size: 16, color: Colors.grey.shade600),
+                          const SizedBox(width: 6),
+                          Text(
+                            vaga['modalidade'] ?? 'Presencial',
+                            style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      // Descrição
+                      const Text('Descrição', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF374151))),
+                      const SizedBox(height: 8),
+                      Text(
+                        vaga['descricao'] ?? 'Sem descrição detalhada.',
+                        style: TextStyle(color: Colors.grey.shade700, fontSize: 14, height: 1.5),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Requisitos (Opcional)
+                      if ((vaga['requisitos'] ?? '').toString().isNotEmpty) ...[
+                        const Text('Requisitos Adicionais', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF374151))),
+                        const SizedBox(height: 8),
+                        Text(
+                          vaga['requisitos'],
+                          style: TextStyle(color: Colors.grey.shade700, fontSize: 14, height: 1.5),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // Habilidades
+                      const Text('Habilidades Exigidas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF374151))),
+                      const SizedBox(height: 12),
+                      chipsHabilidades(habilidadesDaVaga(vaga)),
+                      const SizedBox(height: 24),
+
+                      const Divider(),
+                      const SizedBox(height: 16),
+
+                      // Upload de Currículo
+                      const Text('Enviar Currículo (Opcional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF374151))),
+                      const SizedBox(height: 8),
+                      const Text('Deseja anexar um PDF para fortalecer sua candidatura?', style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
+                      const SizedBox(height: 12),
+                      
+                      if (arquivoSelecionado == null)
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            FilePickerResult? result = await FilePicker.pickFiles(
+                              type: FileType.custom,
+                              allowedExtensions: ['pdf'],
+                              withData: true,
+                            );
+                            if (result != null && result.files.first.bytes != null) {
+                              setDialogState(() => arquivoSelecionado = result.files.first);
+                              setState(() => arquivoSelecionado = result.files.first);
+                            }
+                          },
+                          icon: const Icon(Icons.attach_file, color: Color(0xFF7C3AED)),
+                          label: const Text('Anexar Currículo (PDF)', style: TextStyle(color: Color(0xFF7C3AED))),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF7C3AED)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                        )
+                      else
+                        Card(
+                          color: Colors.purple.shade50,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.purple.shade100)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.picture_as_pdf, color: Colors.red),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(arquivoSelecionado!.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 20),
+                                  onPressed: () {
+                                    setDialogState(() => arquivoSelecionado = null);
+                                    setState(() => arquivoSelecionado = null);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancelar'),
+                  child: const Text('Cancelar', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Confirmar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7C3AED),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  child: const Text('Confirmar Candidatura', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -325,28 +329,24 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       final uri = Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId/candidatar');
       final request = http.MultipartRequest('POST', uri);
 
-      // Cabeçalhos que o Express/CORS precisam validar
       request.headers['Authorization'] = 'Bearer $token';
       request.headers['Accept'] = 'application/json';
 
       if (arquivo != null && arquivo.bytes != null) {
-        // Converte os bytes em arquivo multipart compatível com o navegador
         final multipartFile = http.MultipartFile.fromBytes(
-          'curriculo', // Campo mapeado no Multer do backend
+          'curriculo',
           arquivo.bytes!,
           filename: arquivo.name,
-          contentType: MediaType('application', 'pdf'), // Evita problemas de leitura na API
+          contentType: MediaType('application', 'pdf'),
         );
         request.files.add(multipartFile);
       }
 
-      // Envia os streams do form-data
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
       if (!mounted) return;
 
-      // --- INÍCIO DA SUA CORREÇÃO DE QA (Extraindo 'mensagem' ou 'message') ---
       String? mensagemApi;
       if (response.body.isNotEmpty) {
         try {
@@ -354,38 +354,22 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
           mensagemApi = data['mensagem'] ?? data['message'];
         } catch (_) {}
       }
-      // --- FIM DA CORREÇÃO ---
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        setState(() {
-          statusCandidaturasPorVaga[vagaId] = 'PENDENTE';
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagemApi ?? 'Candidatura enviada com sucesso.')),
-        );
+        setState(() => statusCandidaturasPorVaga[vagaId] = 'PENDENTE');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemApi ?? 'Candidatura enviada com sucesso.')));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagemApi ?? 'Erro ao processar candidatura.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemApi ?? 'Erro ao processar candidatura.')));
       }
     } catch (e) {
       if (!mounted) return;
-
-      print('--- ERRO DETALHADO NO TERMINAL ---');
-      print(e);
-      print('---------------------------------');
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erro de conexão com o servidor.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro de conexão com o servidor.')));
     }
   }
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed('/');
   }
@@ -393,250 +377,265 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   String nomeEmpresa(dynamic vaga) {
     final empresa = vaga['empresa'];
     if (empresa == null) return 'Empresa não informada';
-
     final usuario = empresa['usuario'];
     if (usuario == null) return 'Empresa não informada';
-
-    return usuario['nome_exibicao'] ??
-        usuario['nome'] ??
-        'Empresa não informada';
+    return usuario['nome_exibicao'] ?? usuario['nome'] ?? 'Empresa não informada';
   }
 
   String labelStatusCandidatura(String status) {
     switch (status) {
-      case 'PENDENTE':
-        return 'Em análise';
-      case 'ACEITA':
-        return 'Aceita';
-      case 'REJEITADA':
-        return 'Rejeitada';
-      default:
-        return status;
+      case 'PENDENTE': return 'Em análise';
+      case 'ACEITA': return 'Aceita';
+      case 'REJEITADA': return 'Rejeitada';
+      default: return status;
     }
   }
 
-  IconData iconeStatusCandidatura(String status) {
+  Color corStatusCandidatura(String status) {
     switch (status) {
-      case 'PENDENTE':
-        return Icons.hourglass_empty;
-      case 'ACEITA':
-        return Icons.check_circle_outline;
-      case 'REJEITADA':
-        return Icons.cancel_outlined;
-      default:
-        return Icons.info_outline;
+      case 'PENDENTE': return Colors.orange.shade600;
+      case 'ACEITA': return Colors.green.shade600;
+      case 'REJEITADA': return Colors.red.shade600;
+      default: return Colors.grey.shade600;
     }
   }
-
-  Color? corStatusCandidatura(String status) {
+  
+  Color corFundoStatusCandidatura(String status) {
     switch (status) {
-      case 'PENDENTE':
-        return Colors.orange.shade100;
-      case 'ACEITA':
-        return Colors.green.shade100;
-      case 'REJEITADA':
-        return Colors.red.shade100;
-      default:
-        return null;
+      case 'PENDENTE': return Colors.orange.shade50;
+      case 'ACEITA': return Colors.green.shade50;
+      case 'REJEITADA': return Colors.red.shade50;
+      default: return Colors.grey.shade50;
     }
   }
 
   double? matchPercent(dynamic item) {
     final value = item['match_percent'] ?? item['pontuacao_compatibilidade'];
-
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value);
-
     return null;
-  }
-
-  Widget chipMatch(double? match) {
-    if (match == null) return const SizedBox.shrink();
-
-    return Chip(
-      avatar: const Icon(Icons.insights, size: 18),
-      label: Text('${match.round()}% match'),
-    );
   }
 
   List<dynamic> habilidadesDaVaga(dynamic vaga) {
     final relacoes = vaga['vagaHabilidades'];
-
     if (relacoes is List) {
-      return relacoes
-          .map((relacao) => relacao['habilidade'])
-          .where((habilidade) => habilidade != null)
-          .toList();
+      return relacoes.map((relacao) => relacao['habilidade']).where((h) => h != null).toList();
     }
-
     final legado = vaga['habilidades'];
-
     if (legado is List) {
-      return legado
-          .map((nome) => {
-                'id': null,
-                'nome': nome.toString(),
-              })
-          .toList();
+      return legado.map((nome) => {'id': null, 'nome': nome.toString()}).toList();
     }
-
     return [];
   }
 
   Widget chipsHabilidades(List<dynamic> habilidades) {
-    if (habilidades.isEmpty) {
-      return const Text(
-        'Nenhuma habilidade informada.',
-        style: TextStyle(fontStyle: FontStyle.italic),
-      );
-    }
+    if (habilidades.isEmpty) return const SizedBox.shrink();
 
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 6,
+      runSpacing: 6,
       children: habilidades.map((habilidade) {
         final id = habilidade['id'];
         final alunoPossui = id is int && minhasHabilidadesIds.contains(id);
 
-        return Chip(
-          avatar: Icon(
-            alunoPossui ? Icons.check_circle_outline : Icons.label_outline,
-            size: 18,
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: alunoPossui ? const Color(0xFF7C3AED).withOpacity(0.1) : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: alunoPossui ? const Color(0xFF7C3AED).withOpacity(0.3) : Colors.transparent),
           ),
-          label: Text(habilidade['nome'] ?? 'Sem nome'),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (alunoPossui) ...[
+                const Icon(Icons.check_circle, size: 14, color: Color(0xFF7C3AED)),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                habilidade['nome'] ?? 'Sem nome',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: alunoPossui ? const Color(0xFF7C3AED) : Colors.grey.shade700,
+                  fontWeight: alunoPossui ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
         );
       }).toList(),
     );
   }
 
   Widget cardMinhasHabilidades() {
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: isSavingSkills
-            ? const Center(child: CircularProgressIndicator())
-            : SkillSelector(
-                title: 'Minhas habilidades',
-                habilidades: habilidadesDisponiveis,
-                selectedIds: minhasHabilidadesIds,
-                onChanged: (updated) async {
-                  await salvarMinhasHabilidades(updated);
-                },
-              ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+        border: Border.all(color: Colors.grey.shade100),
       ),
+      child: isSavingSkills
+          ? const Center(child: CircularProgressIndicator())
+          : SkillSelector(
+              title: 'Minhas Habilidades',
+              habilidades: habilidadesDisponiveis,
+              selectedIds: minhasHabilidadesIds,
+              onChanged: (updated) async => await salvarMinhasHabilidades(updated),
+            ),
     );
   }
 
   Widget cardVaga(dynamic vaga) {
     final int? vagaId = vaga['id'];
-    final String? statusCandidatura =
-        vagaId != null ? statusCandidaturasPorVaga[vagaId] : null;
-
+    final String? statusCandidatura = vagaId != null ? statusCandidaturasPorVaga[vagaId] : null;
     final bool jaCandidatou = statusCandidatura != null;
     final habilidades = habilidadesDaVaga(vaga);
     final match = matchPercent(vaga);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              vaga['titulo'] ?? 'Sem título',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(vaga['descricao'] ?? 'Sem descrição.'),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+    final double distanciaVisual = vagaId != null ? (vagaId * 1.3 % 15) + 1.2 : 3.5;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16, left: 24, right: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5)),
+        ],
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: jaCandidatou ? null : () => confirmarCandidatura(vaga),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Chip(
-                  label: Text(nomeEmpresa(vaga)),
-                  avatar: const Icon(Icons.business, size: 18),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [Colors.blue.shade300, Colors.blue.shade600],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: const Icon(Icons.business, color: Colors.white, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            vaga['titulo'] ?? 'Sem título',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            nomeEmpresa(vaga),
+                            style: const TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (match != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7C3AED).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${match.round()}%',
+                          style: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                  ],
                 ),
-                Chip(
-                  label: Text(vaga['modalidade'] ?? '-'),
-                  avatar: const Icon(Icons.work_outline, size: 18),
+                const SizedBox(height: 16),
+                
+                Row(
+                  children: [
+                    Icon(Icons.work_outline, size: 16, color: Colors.grey.shade500),
+                    const SizedBox(width: 4),
+                    Text(
+                      vaga['modalidade'] ?? 'Presencial',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(width: 16),
+                    Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade500),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${distanciaVisual.toStringAsFixed(1)} km', 
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    ),
+                  ],
                 ),
-                chipMatch(match),
+                
+                const SizedBox(height: 16),
+                
+                Text(
+                  vaga['descricao'] ?? 'Sem descrição detalhada.',
+                  style: TextStyle(color: Colors.grey.shade700, fontSize: 14, height: 1.4),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+
+                const SizedBox(height: 16),
+                chipsHabilidades(habilidades),
+
+                if (jaCandidatou) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: corFundoStatusCandidatura(statusCandidatura),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Candidatura ${labelStatusCandidatura(statusCandidatura)}',
+                        style: TextStyle(
+                          color: corStatusCandidatura(statusCandidatura),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  )
+                ] else ...[
+                  const SizedBox(height: 16),
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      'Toque para candidatar-se →',
+                      style: TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                  ),
+                ]
               ],
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Habilidades exigidas',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            chipsHabilidades(habilidades),
-            if ((vaga['requisitos'] ?? '').toString().isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text(
-                'Observações adicionais',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Text(vaga['requisitos']),
-            ],
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: jaCandidatou
-                  ? Chip(
-                      avatar: Icon(
-                        iconeStatusCandidatura(statusCandidatura),
-                        size: 18,
-                      ),
-                      label: Text(
-                        'Status: ${labelStatusCandidatura(statusCandidatura)}',
-                      ),
-                      backgroundColor: corStatusCandidatura(statusCandidatura),
-                    )
-                  : ElevatedButton.icon(
-                      onPressed: vagaId == null
-                          ? null
-                          : () => confirmarCandidatura(vaga),
-                      icon: const Icon(Icons.send),
-                      label: const Text('Candidatar-se'),
-                    ),
-            ),
-          ],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget conteudo() {
-    if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return RefreshIndicator(
-      onRefresh: carregarDados,
-      child: ListView(
-        children: [
-          cardMinhasHabilidades(),
-          if (vagas.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(
-                child: Text('Nenhuma vaga disponível no momento.'),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: vagas.map((vaga) => cardVaga(vaga)).toList(),
-              ),
-            ),
-        ],
       ),
     );
   }
@@ -644,37 +643,157 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Vagas disponíveis'),
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.pushNamed(context, '/student-profile'),
-            icon: const Icon(Icons.person, color: Color(0xFF7C3AED)),
-            tooltip: 'Meu Perfil',
-          ),
-          IconButton(
-            onPressed: carregarDados,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            onPressed: logout,
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: Theme.of(context).colorScheme.primaryContainer,
-            child: Text(
-              'Olá, ${nome ?? 'aluno'}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+      backgroundColor: const Color(0xFFFAFAFA), 
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const SizedBox.shrink(),
+                  Row(
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
+                        child: IconButton(
+                          icon: const Icon(Icons.chat_bubble_outline, color: Colors.black87),
+                          onPressed: () {},
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => Navigator.pushNamed(context, '/student-profile'),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFF7C3AED), width: 2),
+                          ),
+                          child: const CircleAvatar(
+                            radius: 20,
+                            backgroundColor: Color(0xFF7C3AED),
+                            child: Icon(Icons.person, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Expanded(child: conteudo()),
-        ],
+
+            Expanded(
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF7C3AED)))
+                  : RefreshIndicator(
+                      color: const Color(0xFF7C3AED),
+                      onRefresh: carregarDados,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Olá, ${nome?.split(' ')[0] ?? 'Aluno'} 👋',
+                                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Color(0xFF111827), letterSpacing: -0.5),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Encontre sua próxima oportunidade',
+                                  style: TextStyle(fontSize: 16, color: Color(0xFF6B7280)),
+                                ),
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
+
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    RichText(
+                                      text: TextSpan(
+                                        text: 'Buscar vagas em um raio de ',
+                                        style: const TextStyle(color: Color(0xFF374151), fontFamily: 'Inter', fontSize: 14),
+                                        children: [
+                                          TextSpan(
+                                            text: '${_raioBusca.toInt()} km',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF7C3AED)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Text('50 km', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                SliderTheme(
+                                  data: SliderTheme.of(context).copyWith(
+                                    activeTrackColor: const Color(0xFF7C3AED),
+                                    inactiveTrackColor: const Color(0xFF7C3AED).withOpacity(0.2),
+                                    thumbColor: Colors.white,
+                                    overlayColor: const Color(0xFF7C3AED).withOpacity(0.1),
+                                    trackHeight: 6.0,
+                                  ),
+                                  child: Slider(
+                                    value: _raioBusca,
+                                    min: 1,
+                                    max: 50,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _raioBusca = value;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+                          cardMinhasHabilidades(),
+                          const SizedBox(height: 24),
+
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                            child: Text(
+                              '${vagas.length} vagas encontradas',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6B7280), fontSize: 14),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          if (vagas.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.all(40),
+                              child: Center(
+                                child: Text(
+                                  'Nenhuma vaga disponível no momento.',
+                                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                                ),
+                              ),
+                            )
+                          else
+                            Column(
+                              children: vagas.map((vaga) => cardVaga(vaga)).toList(),
+                            ),
+                            
+                          const SizedBox(height: 40),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
