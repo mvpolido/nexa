@@ -25,6 +25,12 @@ router.post("/register", async (req, res) => {
       descricao,
       latitude,
       longitude,
+      instituicao,
+      ano_conclusao,
+      cep,
+      endereco,
+      numero,
+      url_curriculo
     } = req.body;
 
     const senha = req.body.senha ?? req.body.password;
@@ -122,8 +128,14 @@ router.post("/register", async (req, res) => {
         id: usuarioSalvo.id,
         cpf: cpfLimpo,
         curso: curso || null,
+        instituicao: instituicao || null,
+        ano_conclusao: ano_conclusao || null,
+        cep: cep || null,
+        endereco: endereco || null,
+        numero: numero || null,
         latitude: latitude ?? null,
         longitude: longitude ?? null,
+        url_curriculo: url_curriculo || null
       });
 
       await alunoRepository.save(aluno);

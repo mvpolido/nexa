@@ -63,11 +63,15 @@ export class CandidaturaController {
         });
       }
 
-    const novaCandidatura = candidaturaRepository.create({
-      aluno,
-      vaga,
-      status: CandidaturaStatus.PENDENTE,
-    });
+      // CAPTURA DO ARQUIVO: Se o multer salvou o arquivo, pegamos o nome dele aqui
+      const curriculo_path = req.file ? req.file.filename : undefined;
+
+      const novaCandidatura = candidaturaRepository.create({
+        aluno,
+        vaga,
+        status: CandidaturaStatus.PENDENTE,
+        curriculo_path, // NOVO CAMPO: Salva o identificador único do PDF se ele foi anexado
+      });
 
       const candidaturaSalva = await candidaturaRepository.save(novaCandidatura);
 
@@ -240,7 +244,7 @@ export class CandidaturaController {
         await candidaturaRepository.save(candidatura);
 
       return res.status(200).json({
-        message: "Status da candidatura atualizado com sucesso.",
+        message: "Status da candidatura updated com sucesso.",
         candidatura: candidaturaAtualizada,
       });
     } catch (error: any) {

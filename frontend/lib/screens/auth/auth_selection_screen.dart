@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'login_screen.dart';
-import 'company_signup_screen.dart';
-import 'student_signup_step1_screen.dart';
+import '../../pages/login_page.dart';    // <-- CORRIGIDO: Apontando para as páginas reais
+import '../../pages/register_page.dart'; // <-- CORRIGIDO: Apontando para as páginas reais
 
 class AuthSelectionScreen extends StatelessWidget {
   const AuthSelectionScreen({super.key});
@@ -32,6 +31,7 @@ class AuthSelectionScreen extends StatelessWidget {
               Image.asset(
                 'assets/images/logonexa.png',
                 height: 80,
+                errorBuilder: (_, __, ___) => const Icon(Icons.flutter_dash, size: 80, color: Color(0xFF7C3AED)),
               ),
               const SizedBox(height: 16),
               const Text(
@@ -55,10 +55,10 @@ class AuthSelectionScreen extends StatelessWidget {
               const SizedBox(height: 48),
 
               // Botão Sou Aluno
-              // Botão Sou Aluno
               InkWell(
                 onTap: () {
-                  _navegarComAnimacao(context, const StudentSignupStep1Screen());
+                  // CORRIGIDO: Abre a RegisterPage direto no formulário de Aluno
+                  _navegarComAnimacao(context, const RegisterPage(initialProfile: 'aluno'));
                 },
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
@@ -72,7 +72,7 @@ class AuthSelectionScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
+                          color: Colors.white.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(Icons.school, color: Colors.white),
@@ -109,13 +109,14 @@ class AuthSelectionScreen extends StatelessWidget {
               // Botão Sou Empresa
               InkWell(
                 onTap: () {
-                  _navegarComAnimacao(context, const CompanySignupScreen());
+                  // CORRIGIDO: Abre a RegisterPage direto no formulário de Empresa
+                  _navegarComAnimacao(context, const RegisterPage(initialProfile: 'empresa'));
                 },
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF3E8FF), // Roxo bem clarinho
+                    color: const Color(0xFFF3E8FF), 
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: const Color(0xFFE9D5FF)),
                   ),
@@ -162,7 +163,8 @@ class AuthSelectionScreen extends StatelessWidget {
               // Link para Login
               Center(
                 child: TextButton(
-                  onPressed: () => _navegarComAnimacao(context, const LoginScreen()),
+                  // CORRIGIDO: Redireciona para a nossa LoginPage funcional
+                  onPressed: () => _navegarComAnimacao(context, const LoginPage()),
                   child: const Text.rich(
                     TextSpan(
                       text: 'Já tenho conta / ',
