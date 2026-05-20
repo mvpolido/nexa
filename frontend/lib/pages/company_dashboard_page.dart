@@ -1,5 +1,5 @@
 import 'dart:convert';
-
+import 'dart:html' as importHTML;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -653,17 +653,21 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         }
     }
 
-    void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
+void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
+    print('--- DADOS DA CANDIDATURA REFEITA ---');
+    print(candidaturas);
+    print('------------------------------------');
+
     final List<dynamic> candidaturasDialog = List<dynamic>.from(candidaturas);
 
     showDialog(
-        context: context,
-        builder: (dialogContext) {
+      context: context,
+      builder: (dialogContext) {
         return StatefulBuilder(
-            builder: (context, setDialogState) {
+          builder: (context, setDialogState) {
             return AlertDialog(
-                title: Text('Candidatos - ${vaga['titulo'] ?? 'Vaga'}'),
-                content: SizedBox(
+              title: Text('Candidatos - ${vaga['titulo'] ?? 'Vaga'}'),
+              content: SizedBox(
                 width: 760,
                 child: candidaturasDialog.isEmpty
                     ? const Text('Nenhum candidato encontrado para esta vaga.')
@@ -672,113 +676,147 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                         itemCount: candidaturasDialog.length,
                         separatorBuilder: (_, __) => const Divider(),
                         itemBuilder: (context, index) {
-                            final candidatura = candidaturasDialog[index];
-                            final aluno = candidatura['aluno'];
-                            final usuario = aluno?['usuario'];
+                          final candidatura = candidaturasDialog[index];
+                          final aluno = candidatura['aluno'];
+                          final usuario = aluno?['usuario'];
 
-                            final candidaturaId = candidatura['id'];
+                          final candidaturaId = candidatura['id'];
 
-                            final nomeAluno = usuario?['nome_exibicao'] ??
-                                usuario?['nome'] ??
-                                'Aluno sem nome';
+                          final nomeAluno = usuario?['nome_exibicao'] ??
+                              usuario?['nome'] ??
+                              'Aluno sem nome';
 
-                            final curso = aluno?['curso'] ?? 'Curso não informado';
-                            final statusAtual =
-                                candidatura['status']?.toString() ?? 'PENDENTE';
-                            final match = matchPercent(candidatura);
+                          final curso = aluno?['curso'] ?? 'Curso não informado';
+                          final statusAtual =
+                              candidatura['status']?.toString() ?? 'PENDENTE';
+                          final match = matchPercent(candidatura);
 
-                            return ListTile(
+                          return ListTile(
                             leading: CircleAvatar(
-                                child: Icon(iconeStatusCandidatura(statusAtual)),
+                              child: Icon(iconeStatusCandidatura(statusAtual)),
                             ),
                             title: Text(nomeAluno),
                             subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Column(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                    Text('Curso: $curso'),
-                                    const SizedBox(height: 6),
-                                    Chip(
+                                  Text('Curso: $curso'),
+                                  
+                                  // 🛠️ BOTÃO DE VISUALIZAR CURRÍCULO (NATIVO WEB)
+                                  if (candidatura['curriculo_path'] != null && candidatura['curriculo_path'].toString().isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    TextButton.icon(
+                                      style: TextButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        minimumSize: const Size(0, 0),
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      onPressed: () {
+                                        // Pega o valor atualizado e garante que não é nulo nem a string 'null'
+                                        final String? path = candidatura['curriculo_path']?.toString();
+  
+                                        if (path != null && path != 'null' && path.isNotEmpty) {
+                                          final String urlCompleta = '${ApiConfig.baseUrl}/files/curriculos/$path';
+                                          importHTML.window.open(urlCompleta, '_blank');
+                                        } else {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Erro: Arquivo do currículo não encontrado para este candidato.')),
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 16),
+                                      label: const Text(
+                                        'Visualizar Currículo',
+                                        style: TextStyle(
+                                          color: Colors.blue,
+                                          fontSize: 13,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+
+                                  const SizedBox(height: 6),
+                                  Chip(
                                     avatar: Icon(
-                                        iconeStatusCandidatura(statusAtual),
-                                        size: 18,
+                                      iconeStatusCandidatura(statusAtual),
+                                      size: 18,
                                     ),
                                     label: Text(
-                                        labelStatusCandidatura(statusAtual),
+                                      labelStatusCandidatura(statusAtual),
                                     ),
-                                    ),
-                                    chipMatch(match),
+                                  ),
+                                  chipMatch(match),
                                 ],
-                                ),
+                              ),
                             ),
                             trailing: SizedBox(
-                                width: 170,
-                                child: DropdownButtonFormField<String>(
+                              width: 170,
+                              child: DropdownButtonFormField<String>(
                                 value: ['PENDENTE', 'ACEITA', 'REJEITADA']
                                         .contains(statusAtual)
                                     ? statusAtual
                                     : 'PENDENTE',
                                 decoration: const InputDecoration(
-                                    labelText: 'Status',
-                                    border: OutlineInputBorder(),
-                                    isDense: true,
+                                  labelText: 'Status',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
                                 ),
                                 items: const [
-                                    DropdownMenuItem(
+                                  DropdownMenuItem(
                                     value: 'PENDENTE',
                                     child: Text('Pendente'),
-                                    ),
-                                    DropdownMenuItem(
+                                  ),
+                                  DropdownMenuItem(
                                     value: 'ACEITA',
                                     child: Text('Aceita'),
-                                    ),
-                                    DropdownMenuItem(
+                                  ),
+                                  DropdownMenuItem(
                                     value: 'REJEITADA',
                                     child: Text('Rejeitada'),
-                                    ),
+                                  ),
                                 ],
                                 onChanged: candidaturaId == null
                                     ? null
                                     : (novoStatus) async {
                                         if (novoStatus == null ||
                                             novoStatus == statusAtual) {
-                                            return;
+                                          return;
                                         }
 
                                         final sucesso =
                                             await atualizarStatusCandidatura(
-                                            candidaturaId: candidaturaId,
-                                            novoStatus: novoStatus,
+                                          candidaturaId: candidaturaId,
+                                          novoStatus: novoStatus,
                                         );
 
                                         if (!sucesso) return;
 
                                         setDialogState(() {
-                                            candidaturasDialog[index]['status'] =
-                                                novoStatus;
+                                          candidaturasDialog[index]['status'] =
+                                              novoStatus;
                                         });
-                                        },
-                                ),
+                                      },
+                              ),
                             ),
                             isThreeLine: true,
-                            );
+                          );
                         },
-                        ),
-                ),
-                actions: [
+                      ),
+              ),
+              actions: [
                 TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Fechar'),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Fechar'),
                 ),
-                ],
+              ],
             );
-            },
+          },
         );
-        },
+      },
     );
-    }
-
+  }
     List<dynamic> habilidadesDaVaga(dynamic vaga) {
   final relacoes = vaga['vagaHabilidades'];
 
