@@ -66,13 +66,8 @@ class _LoginPageState extends State<LoginPage> {
           _isLoading = false;
         });
 
-        // --- LÓGICA DE REDIRECIONAMENTO (ALUNO vs EMPRESA) ---
-        final perfil = data['user']['perfil'];
-        if (perfil == 'ALUNO' || perfil == 'aluno') {
-          Navigator.of(context).pushReplacementNamed('/student-profile');
-        } else {
-          Navigator.of(context).pushReplacementNamed('/home');
-        }
+        // Todos os usuários agora vão para a Home
+        Navigator.of(context).pushReplacementNamed('/home');
         
       } else {
         if (!mounted) return;
@@ -329,7 +324,6 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       GestureDetector(
                         onTap: () {
-                          // --- REDIRECIONAMENTO CORRIGIDO PARA /welcome ---
                           Navigator.of(context).pushReplacementNamed('/welcome');
                         },
                         child: const Text(

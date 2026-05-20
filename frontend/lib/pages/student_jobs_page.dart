@@ -648,6 +648,11 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         title: const Text('Vagas disponíveis'),
         actions: [
           IconButton(
+            onPressed: () => Navigator.pushNamed(context, '/student-profile'),
+            icon: const Icon(Icons.person, color: Color(0xFF7C3AED)),
+            tooltip: 'Meu Perfil',
+          ),
+          IconButton(
             onPressed: carregarDados,
             icon: const Icon(Icons.refresh),
           ),
