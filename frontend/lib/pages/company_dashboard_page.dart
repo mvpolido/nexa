@@ -584,6 +584,24 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         }
     }
 
+    double? matchPercent(dynamic item) {
+        final value = item['match_percent'] ?? item['pontuacao_compatibilidade'];
+
+        if (value is num) return value.toDouble();
+        if (value is String) return double.tryParse(value);
+
+        return null;
+    }
+
+    Widget chipMatch(double? match) {
+        if (match == null) return const SizedBox.shrink();
+
+        return Chip(
+            avatar: const Icon(Icons.insights, size: 18),
+            label: Text('${match.round()}% match'),
+        );
+    }
+
     Future<bool> atualizarStatusCandidatura({
         required int candidaturaId,
         required String novoStatus,
@@ -667,6 +685,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                             final curso = aluno?['curso'] ?? 'Curso não informado';
                             final statusAtual =
                                 candidatura['status']?.toString() ?? 'PENDENTE';
+                            final match = matchPercent(candidatura);
 
                             return ListTile(
                             leading: CircleAvatar(
@@ -689,6 +708,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                                         labelStatusCandidatura(statusAtual),
                                     ),
                                     ),
+                                    chipMatch(match),
                                 ],
                                 ),
                             ),

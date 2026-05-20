@@ -12,15 +12,20 @@ import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes'; 
 import vagaRoutes from './routes/vaga.routes';
 import habilidadeRoutes from './routes/habilidade.routes';
+import alunoRoutes from './routes/aluno.routes';
 import { empresaRoutes } from './routes/empresa.routes';
 import candidaturaRoutes from './routes/candidatura.routes';
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: '*', 
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true
+}));
 app.use(express.json());
 
-// 👈 2. Configuração para servir arquivos estáticos
-// Agora, qualquer arquivo em /uploads será acessível via http://localhost:3000/files
+
 app.use('/files', express.static(path.resolve(__dirname, '..', 'uploads')));
 
 app.use('/empresas', empresaRoutes);
@@ -39,6 +44,7 @@ app.use('/auth', authRoutes);
 app.use('/users', userRoutes); 
 app.use('/vagas', vagaRoutes);
 app.use('/habilidades', habilidadeRoutes);
+app.use('/alunos', alunoRoutes);
 app.use(candidaturaRoutes);
 
 const startServer = async () => {

@@ -38,6 +38,10 @@ export class Candidatura {
   @Column({ type: "decimal", precision: 5, scale: 2, nullable: true })
   pontuacao_compatibilidade?: number;
 
+  
+  @Column({ name: "curriculo_path", type: "varchar", length: 255, nullable: true })
+  curriculo_path?: string;
+
   @CreateDateColumn()
   data_candidatura!: Date;
 
