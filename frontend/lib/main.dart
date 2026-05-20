@@ -5,6 +5,7 @@ import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'pages/vaga_detalhes_page.dart'; 
 import 'screens/auth/auth_selection_screen.dart'; 
+import 'pages/student_profile_page.dart';
 
 void main() {
   runApp(const NexaApp());
@@ -57,6 +58,7 @@ class NexaApp extends StatelessWidget {
       ),
       initialRoute: '/welcome',
       routes: {
+        '/student-profile': (context) => const StudentProfilePage(),
         '/welcome': (context) => const AuthSelectionScreen(), 
         '/': (context) => const LoginPage(),                  
         '/register': (context) => const RegisterPage(),

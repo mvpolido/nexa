@@ -66,7 +66,14 @@ class _LoginPageState extends State<LoginPage> {
           _isLoading = false;
         });
 
-        Navigator.of(context).pushReplacementNamed('/home');
+        // --- LÓGICA DE REDIRECIONAMENTO (ALUNO vs EMPRESA) ---
+        final perfil = data['user']['perfil'];
+        if (perfil == 'ALUNO' || perfil == 'aluno') {
+          Navigator.of(context).pushReplacementNamed('/student-profile');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+        
       } else {
         if (!mounted) return;
 
@@ -322,7 +329,8 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       GestureDetector(
                         onTap: () {
-                          Navigator.of(context).pushReplacementNamed('/register');
+                          // --- REDIRECIONAMENTO CORRIGIDO PARA /welcome ---
+                          Navigator.of(context).pushReplacementNamed('/welcome');
                         },
                         child: const Text(
                           'Cadastre-se',
