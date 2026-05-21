@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../config/api_config.dart';
 import '../widgets/skill_selector.dart';
+import 'chat_page.dart';
+import 'chat_list_page.dart'; // 👈 IMPORTAÇÃO DA LISTA DE CHATS
 
 class StudentJobsPage extends StatefulWidget {
   const StudentJobsPage({super.key});
@@ -20,12 +22,14 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
   String? token;
   String? nome;
+  int? meuUsuarioId;
 
   List<dynamic> vagas = [];
   List<dynamic> habilidadesDisponiveis = [];
 
   Set<int> minhasHabilidadesIds = {};
   Map<int, String> statusCandidaturasPorVaga = {};
+  Map<int, int> idCandidaturasPorVaga = {};
 
   double _raioBusca = 10.0;
 
@@ -39,6 +43,13 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     final prefs = await SharedPreferences.getInstance();
     token = prefs.getString('token');
     nome = prefs.getString('user_nome');
+
+    final rawUserId = prefs.get('user_id');
+    if (rawUserId is int) {
+      meuUsuarioId = rawUserId;
+    } else if (rawUserId is String) {
+      meuUsuarioId = int.tryParse(rawUserId);
+    }
 
     if (token == null || token!.isEmpty) {
       if (!mounted) return;
@@ -118,11 +129,18 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         final data = jsonDecode(response.body);
         if (data is List) {
           statusCandidaturasPorVaga = {};
+          idCandidaturasPorVaga = {}; 
+          
           for (final candidatura in data) {
             final vagaId = candidatura['vaga_id'];
             final status = candidatura['status'];
+            final candidaturaId = candidatura['id'];
+
             if (vagaId is int && status != null) {
               statusCandidaturasPorVaga[vagaId] = status.toString();
+              if (candidaturaId is int) {
+                idCandidaturasPorVaga[vagaId] = candidaturaId;
+              }
             }
           }
         }
@@ -187,7 +205,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header da Vaga
                       Text(
                         vaga['titulo'] ?? 'Sem título',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
@@ -199,7 +216,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                       ),
                       const SizedBox(height: 16),
                       
-                      // Modalidade
                       Row(
                         children: [
                           Icon(Icons.work_outline, size: 16, color: Colors.grey.shade600),
@@ -212,7 +228,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                       ),
                       const SizedBox(height: 24),
                       
-                      // Descrição
                       const Text('Descrição', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF374151))),
                       const SizedBox(height: 8),
                       Text(
@@ -221,7 +236,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Requisitos (Opcional)
                       if ((vaga['requisitos'] ?? '').toString().isNotEmpty) ...[
                         const Text('Requisitos Adicionais', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF374151))),
                         const SizedBox(height: 8),
@@ -232,7 +246,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                         const SizedBox(height: 20),
                       ],
 
-                      // Habilidades
                       const Text('Habilidades Exigidas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF374151))),
                       const SizedBox(height: 12),
                       chipsHabilidades(habilidadesDaVaga(vaga)),
@@ -241,7 +254,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                       const Divider(),
                       const SizedBox(height: 16),
 
-                      // Upload de Currículo
                       const Text('Enviar Currículo (Opcional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF374151))),
                       const SizedBox(height: 8),
                       const Text('Deseja anexar um PDF para fortalecer sua candidatura?', style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
@@ -356,7 +368,8 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        setState(() => statusCandidaturasPorVaga[vagaId] = 'PENDENTE');
+        await carregarMinhasCandidaturas(); 
+        if (mounted) setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemApi ?? 'Candidatura enviada com sucesso.')));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemApi ?? 'Erro ao processar candidatura.')));
@@ -621,7 +634,38 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                         ),
                       ),
                     ),
-                  )
+                  ),
+
+                  if (statusCandidatura == 'ACEITA' && meuUsuarioId != null && idCandidaturasPorVaga[vagaId] != null) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981), 
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatPage(
+                                candidaturaId: idCandidaturasPorVaga[vagaId]!,
+                                vagaTitulo: vaga['titulo'] ?? 'Vaga',
+                                token: token!,
+                                meuUsuarioId: meuUsuarioId!,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.chat, size: 18),
+                        label: const Text('Abrir Chat com a Empresa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      ),
+                    ),
+                  ]
                 ] else ...[
                   const SizedBox(height: 16),
                   const Align(
@@ -640,6 +684,42 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     );
   }
 
+  // 🛠️ MÉTODOS DE CHAT DO ALUNO INSERIDOS AQUI
+  Future<int> buscarContagemChats() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/chats/contagem'), 
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body)['total'] ?? 0;
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  Widget buildChatBadge() {
+    return FutureBuilder<int>(
+      future: buscarContagemChats(), 
+      builder: (context, snapshot) {
+        final count = snapshot.data ?? 0;
+        return Badge(
+          label: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 10)),
+          isLabelVisible: count > 0,
+          backgroundColor: const Color(0xFF7C3AED),
+          child: IconButton(
+            icon: const Icon(Icons.chat_bubble_outline, color: Colors.black87, size: 22),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(
+                builder: (context) => ChatListPage(token: token!),
+              ));
+            },
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -655,13 +735,11 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                   const SizedBox.shrink(),
                   Row(
                     children: [
+                      // 🛠️ BADGE DINÂMICO APLICADO
                       Container(
                         margin: const EdgeInsets.only(right: 12),
                         decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
-                        child: IconButton(
-                          icon: const Icon(Icons.chat_bubble_outline, color: Colors.black87),
-                          onPressed: () {},
-                        ),
+                        child: buildChatBadge(),
                       ),
                       GestureDetector(
                         onTap: () => Navigator.pushNamed(context, '/student-profile'),
