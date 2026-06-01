@@ -5,6 +5,7 @@ import { Vaga } from "../entities/Vaga";
 import { Aluno } from "../entities/Aluno";
 import { Empresa } from "../entities/Empresa";
 import { UsuarioPerfil } from "../entities/Usuario";
+import { Mensagem } from "../entities/Mensagem";
 
 export class CandidaturaController {
   static async candidatar(req: Request, res: Response) {
@@ -63,14 +64,13 @@ export class CandidaturaController {
         });
       }
 
-      // CAPTURA DO ARQUIVO: Se o multer salvou o arquivo, pegamos o nome dele aqui
       const curriculo_path = req.file ? req.file.filename : undefined;
 
       const novaCandidatura = candidaturaRepository.create({
         aluno,
         vaga,
         status: CandidaturaStatus.PENDENTE,
-        curriculo_path, // NOVO CAMPO: Salva o identificador único do PDF se ele foi anexado
+        curriculo_path,
       });
 
       const candidaturaSalva = await candidaturaRepository.save(novaCandidatura);
@@ -230,7 +230,6 @@ export class CandidaturaController {
         });
       }
 
-      // Valida se a empresa logada é a dona da vaga
       if (candidatura.vaga.empresa_id !== usuarioLogadoId) {
         return res.status(403).json({
           message:
@@ -240,8 +239,34 @@ export class CandidaturaController {
 
       candidatura.status = status;
 
-      const candidaturaAtualizada =
-        await candidaturaRepository.save(candidatura);
+      const candidaturaAtualizada = await candidaturaRepository.save(candidatura);
+
+      // Gatilho do Chat: Mensagem Automática de Aceite
+      if (status === "ACEITA" || status === CandidaturaStatus.ACEITA) {
+        const mensagemRepository = AppDataSource.getRepository(Mensagem);
+        
+        const mensagemAutomatica = mensagemRepository.create({
+          candidatura_id: candidatura.id,
+          remetente_id: usuarioLogadoId,
+          conteudo: `Parabéns! Você foi selecionado para a vaga "${candidatura.vaga.titulo}". O chat agora está oficialmente liberado para conversarem.`,
+        });
+        
+        await mensagemRepository.save(mensagemAutomatica);
+
+        try {
+          const { getIO } = require("../socket");
+          const io = getIO();
+          io.to(`chat_${candidatura.id}`).emit("receive_message", {
+            id: mensagemAutomatica.id,
+            candidatura_id: candidatura.id,
+            remetente_id: usuarioLogadoId,
+            conteudo: mensagemAutomatica.conteudo,
+            enviado_em: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error("Socket.io não estava pronto para emitir a mensagem automática:", err);
+        }
+      }
 
       return res.status(200).json({
         message: "Status da candidatura updated com sucesso.",
@@ -250,6 +275,26 @@ export class CandidaturaController {
     } catch (error: any) {
       return res.status(500).json({
         message: "Erro ao atualizar status da candidatura.",
+        error: error.message,
+      });
+    }
+  }
+
+  static async listarMensagens(req: Request, res: Response) {
+    try {
+      const candidaturaId = Number(req.params.id);
+      const mensagemRepository = AppDataSource.getRepository(Mensagem);
+
+      const mensagens = await mensagemRepository.find({
+        where: { candidatura_id: candidaturaId },
+        order: { enviado_em: "ASC" },
+        relations: ["remetente"]
+      });
+
+      return res.status(200).json(mensagens);
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao listar histórico de mensagens do chat.",
         error: error.message,
       });
     }

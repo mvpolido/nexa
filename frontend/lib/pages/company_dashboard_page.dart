@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/skill_selector.dart';
-
 import '../config/api_config.dart';
+import 'chat_page.dart'; 
+import 'chat_list_page.dart'; // 👈 IMPORTAÇÃO DA LISTA DE CHATS
 
 class CompanyDashboardPage extends StatefulWidget {
   const CompanyDashboardPage({super.key});
@@ -18,6 +19,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   bool isLoading = true;
   String? token;
   String? nome;
+  int? meuUsuarioId; 
 
   int selectedMenuIndex = 0;
 
@@ -35,6 +37,13 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
     token = prefs.getString('token');
     nome = prefs.getString('user_nome');
+    
+    final rawUserId = prefs.get('user_id');
+    if (rawUserId is int) {
+      meuUsuarioId = rawUserId;
+    } else if (rawUserId is String) {
+      meuUsuarioId = int.tryParse(rawUserId);
+    }
 
     if (token == null || token!.isEmpty) {
       if (!mounted) return;
@@ -60,7 +69,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     return vagas.where((vaga) => vagaArquivada(vaga)).toList();
   }
 
-    Future<void> carregarHabilidades() async {
+  Future<void> carregarHabilidades() async {
     try {
         final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/habilidades'),
@@ -77,9 +86,8 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         }
         }
     } catch (_) {
-        // A tela continua funcionando, mas sem chips.
     }
-    }
+  }
 
   Future<void> carregarVagas() async {
     setState(() {
@@ -653,11 +661,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         }
     }
 
-void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
-    print('--- DADOS DA CANDIDATURA REFEITA ---');
-    print(candidaturas);
-    print('------------------------------------');
-
+  void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
     final List<dynamic> candidaturasDialog = List<dynamic>.from(candidaturas);
 
     showDialog(
@@ -703,7 +707,6 @@ void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
                                 children: [
                                   Text('Curso: $curso'),
                                   
-                                  // 🛠️ BOTÃO DE VISUALIZAR CURRÍCULO (NATIVO WEB)
                                   if (candidatura['curriculo_path'] != null && candidatura['curriculo_path'].toString().isNotEmpty) ...[
                                     const SizedBox(height: 4),
                                     TextButton.icon(
@@ -713,7 +716,6 @@ void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
                                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                       ),
                                       onPressed: () {
-                                        // Pega o valor atualizado e garante que não é nulo nem a string 'null'
                                         final String? path = candidatura['curriculo_path']?.toString();
   
                                         if (path != null && path != 'null' && path.isNotEmpty) {
@@ -738,16 +740,46 @@ void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
                                   ],
 
                                   const SizedBox(height: 6),
-                                  Chip(
-                                    avatar: Icon(
-                                      iconeStatusCandidatura(statusAtual),
-                                      size: 18,
-                                    ),
-                                    label: Text(
-                                      labelStatusCandidatura(statusAtual),
-                                    ),
+                                  Wrap(
+                                    spacing: 8,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      Chip(
+                                        avatar: Icon(
+                                          iconeStatusCandidatura(statusAtual),
+                                          size: 18,
+                                        ),
+                                        label: Text(labelStatusCandidatura(statusAtual)),
+                                      ),
+                                      chipMatch(match),
+                                      
+                                      if (statusAtual == 'ACEITA' && meuUsuarioId != null)
+                                        ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFF10B981),
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                            minimumSize: const Size(0, 32),
+                                          ),
+                                          onPressed: () {
+                                            Navigator.of(dialogContext).pop();
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => ChatPage(
+                                                  candidaturaId: candidaturaId,
+                                                  vagaTitulo: vaga['titulo'] ?? 'Vaga',
+                                                  token: token!,
+                                                  meuUsuarioId: meuUsuarioId!,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          icon: const Icon(Icons.chat, size: 16),
+                                          label: const Text('Abrir Chat', style: TextStyle(fontSize: 12)),
+                                        ),
+                                    ],
                                   ),
-                                  chipMatch(match),
                                 ],
                               ),
                             ),
@@ -1041,22 +1073,68 @@ Set<int> habilidadeIdsDaVaga(dynamic vaga) {
     return 'Vagas ocultas para alunos, com histórico de candidatos preservado.';
   }
 
+  // 🛠️ MÉTODOS DE CHAT DA EMPRESA INSERIDOS AQUI
+  Future<int> buscarContagemChats() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/chats/contagem'), 
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body)['total'] ?? 0;
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  Widget buildChatBadge() {
+    return FutureBuilder<int>(
+      future: buscarContagemChats(), 
+      builder: (context, snapshot) {
+        final count = snapshot.data ?? 0;
+        return Badge(
+          label: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 11)),
+          isLabelVisible: count > 0,
+          backgroundColor: const Color(0xFF7C3AED),
+          child: IconButton(
+            icon: const Icon(Icons.chat_bubble_outline, color: Colors.black87),
+            tooltip: 'Mensagens/Chats',
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(
+                builder: (context) => ChatListPage(token: token!),
+              ));
+            },
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool mostrandoArquivadas = selectedMenuIndex == 1;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard da Empresa'),
+        title: const Text('Dashboard da Empresa', style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, right: 8.0),
+            // 🛠️ BADGE DINÂMICO APLICADO
+            child: buildChatBadge(),
+          ),
           IconButton(
             onPressed: carregarVagas,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.black87),
           ),
           IconButton(
             onPressed: logout,
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout, color: Colors.black87),
           ),
+          const SizedBox(width: 12),
         ],
       ),
       floatingActionButton: mostrandoArquivadas
