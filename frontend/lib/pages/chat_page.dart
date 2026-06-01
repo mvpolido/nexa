@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../config/api_config.dart';
+import 'public_company_profile_page.dart';
+import 'public_student_profile_page.dart'; // IMPORTAÇÃO DA TELA DO ALUNO
 
 class ChatPage extends StatefulWidget {
   final int candidaturaId;
   final String vagaTitulo;
   final String token;
   final int meuUsuarioId;
+  final bool isAluno; // NOVO: Flag necessária
 
   const ChatPage({
     super.key,
@@ -16,6 +19,7 @@ class ChatPage extends StatefulWidget {
     required this.vagaTitulo,
     required this.token,
     required this.meuUsuarioId,
+    required this.isAluno, //  Obrigatório agora
   });
 
   @override
@@ -133,6 +137,31 @@ class _ChatPageState extends State<ChatPage> {
         ),
         backgroundColor: const Color(0xFF7C3AED),
         elevation: 1,
+        actions: [
+          IconButton(
+            // MOSTRA O ÍCONE CORRETO DEPENDENDO DE QUEM ESTÁ LOGADO
+            icon: Icon(widget.isAluno ? Icons.storefront : Icons.person, color: Colors.white),
+            tooltip: widget.isAluno ? 'Ver Perfil da Empresa' : 'Ver Perfil do Aluno',
+            onPressed: () {
+              if (widget.isAluno) {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (context) => PublicCompanyProfilePage(
+                    candidaturaId: widget.candidaturaId,
+                    token: widget.token,
+                  ),
+                ));
+              } else {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (context) => PublicStudentProfilePage(
+                    candidaturaId: widget.candidaturaId,
+                    token: widget.token,
+                  ),
+                ));
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [

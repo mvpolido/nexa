@@ -1,13 +1,7 @@
-import {
-  Entity,
-  PrimaryColumn,
-  Column,
-  OneToOne,
-  OneToMany,
-  JoinColumn,
-} from "typeorm";
+import { Entity, PrimaryColumn, Column, OneToOne, OneToMany, JoinColumn } from "typeorm";
 import { Usuario } from "./Usuario";
 import { Vaga } from "./Vaga";
+import { Avaliacao } from "./Avaliacao";
 
 @Entity("empresa")
 export class Empresa {
@@ -26,10 +20,16 @@ export class Empresa {
   @Column({ type: "decimal", precision: 11, scale: 8, nullable: true })
   longitude?: number;
 
+  @Column({ type: "boolean", default: false })
+  verificada!: boolean;
+
   @OneToOne(() => Usuario, (usuario) => usuario.empresa, { onDelete: "CASCADE" })
   @JoinColumn({ name: "id" })
   usuario?: Usuario;
 
   @OneToMany(() => Vaga, (vaga) => vaga.empresa)
   vagas!: Vaga[];
+
+  @OneToMany(() => Avaliacao, avaliacao => avaliacao.empresa)
+  avaliacoes!: Avaliacao[];
 }

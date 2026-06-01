@@ -52,7 +52,6 @@ export class ChatController {
       }
 
       const chats = await Promise.all(candidaturas.map(async (cand) => {
-        // Pegar a última mensagem do chat
         const ultimaMsg = await mensagemRepository.findOne({
           where: { candidatura_id: cand.id },
           order: { enviado_em: "DESC" }
@@ -60,10 +59,8 @@ export class ChatController {
 
         let nomeContato = "";
         if (perfilLogado === UsuarioPerfil.ALUNO) {
-          // 🛠️ CORRIGIDO: Removido o fallback '.nome' que o TS reclamou
           nomeContato = cand.vaga.empresa?.usuario?.nome_exibicao || "Empresa";
         } else {
-          // 🛠️ CORRIGIDO: Removido o fallback '.nome' que o TS reclamou
           nomeContato = cand.aluno?.usuario?.nome_exibicao || "Aluno";
         }
 
@@ -78,12 +75,30 @@ export class ChatController {
         };
       }));
 
-      // Ordenar pelas mensagens mais recentes
       chats.sort((a, b) => new Date(b.data_ultima_mensagem).getTime() - new Date(a.data_ultima_mensagem).getTime());
 
       return res.status(200).json(chats);
     } catch (error) {
       return res.status(500).json({ message: "Erro ao listar conversas" });
+    }
+  }
+
+  // 🛠️ NOVO: Empresa a ver o perfil do aluno no chat
+  static async getPerfilAluno(req: Request, res: Response) {
+    try {
+      const { candidaturaId } = req.params;
+      const candidatura = await AppDataSource.getRepository(Candidatura).findOne({
+        where: { id: Number(candidaturaId) },
+        relations: ["aluno", "aluno.usuario", "aluno.alunoHabilidades", "aluno.alunoHabilidades.habilidade"]
+      });
+
+      if (!candidatura || !candidatura.aluno) {
+        return res.status(404).json({ message: 'Aluno não encontrado.' });
+      }
+
+      return res.status(200).json(candidatura.aluno);
+    } catch (error) {
+      return res.status(500).json({ message: 'Erro ao buscar perfil do aluno' });
     }
   }
 }

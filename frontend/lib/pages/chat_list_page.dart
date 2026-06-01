@@ -6,7 +6,13 @@ import 'chat_page.dart';
 
 class ChatListPage extends StatefulWidget {
   final String token;
-  const ChatListPage({super.key, required this.token});
+  final bool isAluno; // 🛠️ NOVO: Flag para saber quem está a usar a lista
+
+  const ChatListPage({
+    super.key, 
+    required this.token, 
+    required this.isAluno, // 🛠️ Obrigatório agora
+  });
 
   @override
   State<ChatListPage> createState() => _ChatListPageState();
@@ -211,6 +217,7 @@ class _ChatListPageState extends State<ChatListPage> {
                                 vagaTitulo: chat['vaga_titulo'],
                                 token: widget.token,
                                 meuUsuarioId: chat['usuario_id'],
+                                isAluno: widget.isAluno, // 🛠️ REPASSE DA VARIÁVEL AQUI
                               ),
                             )).then((_) => carregarChats()), // Recarrega a lista ao voltar do chat
                           );

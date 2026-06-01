@@ -6,8 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../config/api_config.dart';
 import '../widgets/skill_selector.dart';
-import 'chat_page.dart';
-import 'chat_list_page.dart'; // 👈 IMPORTAÇÃO DA LISTA DE CHATS
+import 'chat_page.dart'; 
+import 'chat_list_page.dart';
 
 class StudentJobsPage extends StatefulWidget {
   const StudentJobsPage({super.key});
@@ -22,14 +22,14 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
   String? token;
   String? nome;
-  int? meuUsuarioId;
+  int? meuUsuarioId; 
 
   List<dynamic> vagas = [];
   List<dynamic> habilidadesDisponiveis = [];
 
   Set<int> minhasHabilidadesIds = {};
   Map<int, String> statusCandidaturasPorVaga = {};
-  Map<int, int> idCandidaturasPorVaga = {};
+  Map<int, int> idCandidaturasPorVaga = {}; 
 
   double _raioBusca = 10.0;
 
@@ -657,6 +657,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                                 vagaTitulo: vaga['titulo'] ?? 'Vaga',
                                 token: token!,
                                 meuUsuarioId: meuUsuarioId!,
+                                isAluno: true, // 🛠️ CORREÇÃO APLICADA AQUI
                               ),
                             ),
                           );
@@ -684,7 +685,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     );
   }
 
-  // 🛠️ MÉTODOS DE CHAT DO ALUNO INSERIDOS AQUI
   Future<int> buscarContagemChats() async {
     try {
       final response = await http.get(
@@ -711,7 +711,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
             icon: const Icon(Icons.chat_bubble_outline, color: Colors.black87, size: 22),
             onPressed: () {
               Navigator.push(context, MaterialPageRoute(
-                builder: (context) => ChatListPage(token: token!),
+                builder: (context) => ChatListPage(token: token!, isAluno: true), // 🛠️ CORREÇÃO APLICADA AQUI
               ));
             },
           ),
@@ -735,7 +735,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                   const SizedBox.shrink(),
                   Row(
                     children: [
-                      // 🛠️ BADGE DINÂMICO APLICADO
                       Container(
                         margin: const EdgeInsets.only(right: 12),
                         decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
