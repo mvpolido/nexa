@@ -7,6 +7,7 @@ import '../widgets/skill_selector.dart';
 import '../config/api_config.dart';
 import 'chat_page.dart'; 
 import 'chat_list_page.dart'; 
+import '../widgets/sininho_notificacao.dart';
 
 class CompanyDashboardPage extends StatefulWidget {
   const CompanyDashboardPage({super.key});
@@ -1123,6 +1124,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         foregroundColor: Colors.black87,
         elevation: 0,
         actions: [
+          // 🔔  WIDGET DE SININHO 
+          const Padding(
+            padding: EdgeInsets.only(top: 8.0, right: 4.0),
+            child: SininhoNotificacao(),
+          ),
           Padding(
             padding: const EdgeInsets.only(top: 8.0, right: 8.0),
             child: buildChatBadge(),
