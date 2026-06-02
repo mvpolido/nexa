@@ -7,6 +7,7 @@ import 'pages/vaga_detalhes_page.dart';
 import 'screens/auth/auth_selection_screen.dart'; 
 import 'pages/student_profile_page.dart';
 import 'pages/onboarding_page.dart';
+import 'pages/company_profile_page.dart'; // novo Import
 
 void main() {
   runApp(const NexaApp());
@@ -67,6 +68,7 @@ class NexaApp extends StatelessWidget {
         '/register': (context) => const RegisterPage(),
         '/home': (context) => const HomePage(),
         '/vaga-detalhes': (context) => const VagaDetalhesPage(),
+        '/company-profile': (context) => const CompanyProfilePage(), // NOVA ROTA ADICIONADA
       },
     );
   }

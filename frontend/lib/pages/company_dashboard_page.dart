@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/skill_selector.dart';
 import '../config/api_config.dart';
 import 'chat_page.dart'; 
-import 'chat_list_page.dart'; // 👈 IMPORTAÇÃO DA LISTA DE CHATS
+import 'chat_list_page.dart'; 
 
 class CompanyDashboardPage extends StatefulWidget {
   const CompanyDashboardPage({super.key});
@@ -566,100 +566,101 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       );
     }
   }
-    String labelStatusCandidatura(String status) {
-        switch (status) {
-            case 'PENDENTE':
-            return 'Pendente';
-            case 'ACEITA':
-            return 'Aceita';
-            case 'REJEITADA':
-            return 'Rejeitada';
-            default:
-            return status;
-        }
-    }
 
-    IconData iconeStatusCandidatura(String status) {
-        switch (status) {
-            case 'PENDENTE':
-            return Icons.hourglass_empty;
-            case 'ACEITA':
-            return Icons.check_circle_outline;
-            case 'REJEITADA':
-            return Icons.cancel_outlined;
-            default:
-            return Icons.info_outline;
-        }
-    }
+  String labelStatusCandidatura(String status) {
+      switch (status) {
+          case 'PENDENTE':
+          return 'Pendente';
+          case 'ACEITA':
+          return 'Aceita';
+          case 'REJEITADA':
+          return 'Rejeitada';
+          default:
+          return status;
+      }
+  }
 
-    double? matchPercent(dynamic item) {
-        final value = item['match_percent'] ?? item['pontuacao_compatibilidade'];
+  IconData iconeStatusCandidatura(String status) {
+      switch (status) {
+          case 'PENDENTE':
+          return Icons.hourglass_empty;
+          case 'ACEITA':
+          return Icons.check_circle_outline;
+          case 'REJEITADA':
+          return Icons.cancel_outlined;
+          default:
+          return Icons.info_outline;
+      }
+  }
 
-        if (value is num) return value.toDouble();
-        if (value is String) return double.tryParse(value);
+  double? matchPercent(dynamic item) {
+      final value = item['match_percent'] ?? item['pontuacao_compatibilidade'];
 
-        return null;
-    }
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
 
-    Widget chipMatch(double? match) {
-        if (match == null) return const SizedBox.shrink();
+      return null;
+  }
 
-        return Chip(
-            avatar: const Icon(Icons.insights, size: 18),
-            label: Text('${match.round()}% match'),
-        );
-    }
+  Widget chipMatch(double? match) {
+      if (match == null) return const SizedBox.shrink();
 
-    Future<bool> atualizarStatusCandidatura({
-        required int candidaturaId,
-        required String novoStatus,
-        }) async {
-        try {
-            final response = await http.patch(
-            Uri.parse('${ApiConfig.baseUrl}/candidaturas/$candidaturaId/status'),
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode({
-                'status': novoStatus,
-            }),
-            );
+      return Chip(
+          avatar: const Icon(Icons.insights, size: 18),
+          label: Text('${match.round()}% match'),
+      );
+  }
 
-            if (!mounted) return false;
+  Future<bool> atualizarStatusCandidatura({
+      required int candidaturaId,
+      required String novoStatus,
+      }) async {
+      try {
+          final response = await http.patch(
+          Uri.parse('${ApiConfig.baseUrl}/candidaturas/$candidaturaId/status'),
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+              'status': novoStatus,
+          }),
+          );
 
-            if (response.statusCode == 200) {
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                content: Text('Status da candidatura atualizado com sucesso.'),
-                ),
-            );
+          if (!mounted) return false;
 
-            return true;
-            }
+          if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+              content: Text('Status da candidatura atualizado com sucesso.'),
+              ),
+          );
 
-            String mensagem = 'Erro ao atualizar status da candidatura.';
+          return true;
+          }
 
-            if (response.body.isNotEmpty) {
-            final data = jsonDecode(response.body);
-            mensagem = data['message'] ?? mensagem;
-            }
+          String mensagem = 'Erro ao atualizar status da candidatura.';
 
-            ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(mensagem)),
-            );
+          if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          mensagem = data['message'] ?? mensagem;
+          }
 
-            return false;
-        } catch (_) {
-            if (!mounted) return false;
+          ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensagem)),
+          );
 
-            ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Erro de conexão com o servidor.')),
-            );
+          return false;
+      } catch (_) {
+          if (!mounted) return false;
 
-            return false;
-        }
-    }
+          ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erro de conexão com o servidor.')),
+          );
+
+          return false;
+      }
+  }
 
   void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
     final List<dynamic> candidaturasDialog = List<dynamic>.from(candidaturas);
@@ -771,6 +772,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                                                   vagaTitulo: vaga['titulo'] ?? 'Vaga',
                                                   token: token!,
                                                   meuUsuarioId: meuUsuarioId!,
+                                                  isAluno: false, // 👈 EMPRESA ABRINDO O CHAT
                                                 ),
                                               ),
                                             );
@@ -849,38 +851,39 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       },
     );
   }
-    List<dynamic> habilidadesDaVaga(dynamic vaga) {
-  final relacoes = vaga['vagaHabilidades'];
 
-  if (relacoes is List) {
-    return relacoes
-        .map((relacao) => relacao['habilidade'])
-        .where((habilidade) => habilidade != null)
-        .toList();
+  List<dynamic> habilidadesDaVaga(dynamic vaga) {
+    final relacoes = vaga['vagaHabilidades'];
+
+    if (relacoes is List) {
+      return relacoes
+          .map((relacao) => relacao['habilidade'])
+          .where((habilidade) => habilidade != null)
+          .toList();
+    }
+
+    final legado = vaga['habilidades'];
+
+    if (legado is List) {
+      return legado
+          .map((nome) => {
+                'id': null,
+                'nome': nome.toString(),
+              })
+          .toList();
+    }
+
+    return [];
   }
 
-  final legado = vaga['habilidades'];
-
-  if (legado is List) {
-    return legado
-        .map((nome) => {
-              'id': null,
-              'nome': nome.toString(),
-            })
-        .toList();
+  Set<int> habilidadeIdsDaVaga(dynamic vaga) {
+    return habilidadesDaVaga(vaga)
+        .where((habilidade) => habilidade['id'] is int)
+        .map<int>((habilidade) => habilidade['id'] as int)
+        .toSet();
   }
 
-  return [];
-}
-
-Set<int> habilidadeIdsDaVaga(dynamic vaga) {
-  return habilidadesDaVaga(vaga)
-      .where((habilidade) => habilidade['id'] is int)
-      .map<int>((habilidade) => habilidade['id'] as int)
-      .toSet();
-}
-
-    Widget chipsHabilidades(List<dynamic> habilidades) {
+  Widget chipsHabilidades(List<dynamic> habilidades) {
     if (habilidades.isEmpty) {
         return const Text(
         'Nenhuma habilidade selecionada.',
@@ -898,7 +901,7 @@ Set<int> habilidadeIdsDaVaga(dynamic vaga) {
         );
         }).toList(),
     );
-    }
+  }
 
   Widget cardVaga(dynamic vaga) {
     final bool arquivada = vagaArquivada(vaga);
@@ -1073,7 +1076,6 @@ Set<int> habilidadeIdsDaVaga(dynamic vaga) {
     return 'Vagas ocultas para alunos, com histórico de candidatos preservado.';
   }
 
-  // 🛠️ MÉTODOS DE CHAT DA EMPRESA INSERIDOS AQUI
   Future<int> buscarContagemChats() async {
     try {
       final response = await http.get(
@@ -1101,7 +1103,7 @@ Set<int> habilidadeIdsDaVaga(dynamic vaga) {
             tooltip: 'Mensagens/Chats',
             onPressed: () {
               Navigator.push(context, MaterialPageRoute(
-                builder: (context) => ChatListPage(token: token!),
+                builder: (context) => ChatListPage(token: token!, isAluno: false), // 👈 EMPRESA ABRINDO A LISTA
               ));
             },
           ),
@@ -1123,7 +1125,6 @@ Set<int> habilidadeIdsDaVaga(dynamic vaga) {
         actions: [
           Padding(
             padding: const EdgeInsets.only(top: 8.0, right: 8.0),
-            // 🛠️ BADGE DINÂMICO APLICADO
             child: buildChatBadge(),
           ),
           IconButton(
@@ -1133,6 +1134,22 @@ Set<int> habilidadeIdsDaVaga(dynamic vaga) {
           IconButton(
             onPressed: logout,
             icon: const Icon(Icons.logout, color: Colors.black87),
+          ),
+          GestureDetector(
+            onTap: () => Navigator.pushNamed(context, '/company-profile'),
+            child: Container(
+              margin: const EdgeInsets.only(right: 12, left: 8),
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF7C3AED), width: 2),
+              ),
+              child: const CircleAvatar(
+                radius: 18,
+                backgroundColor: Color(0xFF7C3AED),
+                child: Icon(Icons.business, color: Colors.white, size: 20),
+              ),
+            ),
           ),
           const SizedBox(width: 12),
         ],
