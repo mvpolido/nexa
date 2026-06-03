@@ -32,7 +32,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
 
     if (token == null || token!.isEmpty) {
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/');
+      Navigator.of(context).pushReplacementNamed('/onboarding');
       return;
     }
 

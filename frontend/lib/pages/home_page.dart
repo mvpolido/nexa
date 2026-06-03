@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'company_dashboard_page.dart';
-import 'login_page.dart';
 import 'student_jobs_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -30,11 +29,7 @@ class _HomePageState extends State<HomePage> {
 
     if (token == null || token.isEmpty) {
       if (!mounted) return;
-
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
-
+      Navigator.of(context).pushReplacementNamed('/onboarding');
       return;
     }
 

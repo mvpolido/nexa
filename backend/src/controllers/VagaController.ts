@@ -4,9 +4,10 @@ import { AppDataSource } from "../data-source";
 import { Aluno } from "../entities/Aluno";
 import { Vaga, VagaModalidade } from "../entities/Vaga";
 import { Empresa } from "../entities/Empresa";
-import { UsuarioPerfil } from "../entities/Usuario";
+import { Usuario, UsuarioPerfil } from "../entities/Usuario";
 import { Habilidade } from "../entities/Habilidade";
 import { VagaHabilidade } from "../entities/VagaHabilidade";
+import { Notificacao } from "../entities/Notificacao";
 import { calcularMatchPercent } from "../services/matchService";
 
 export class VagaController {
@@ -106,6 +107,7 @@ export class VagaController {
 
       const empresa = await empresaRepository.findOne({
         where: { usuario: { id: usuarioLogadoId } }, // Busca a empresa que PERTENCE a esse usuário
+        relations: ["usuario"],
       });
 
       if (!empresa) {
@@ -139,6 +141,33 @@ export class VagaController {
       await vagaRepository.save(vagaSalva);
 
       const vagaCompleta = await VagaController.buscarVagaCompleta(vagaSalva.id);
+
+      try {
+        const usuarioRepository = AppDataSource.getRepository(Usuario);
+        const notificacaoRepository = AppDataSource.getRepository(Notificacao);
+        const alunos = await usuarioRepository.find({
+          where: { perfil: UsuarioPerfil.ALUNO },
+        });
+        const nomeEmpresa = empresa.usuario?.nome_exibicao;
+        const mensagem = nomeEmpresa
+          ? `A empresa ${nomeEmpresa} publicou a vaga "${vagaSalva.titulo}".`
+          : `Uma nova vaga foi publicada: "${vagaSalva.titulo}".`;
+        const notificacoes = alunos.map((aluno) =>
+          notificacaoRepository.create({
+            usuario_id: aluno.id,
+            tipo: "NOVA_VAGA",
+            titulo: "Nova vaga publicada",
+            mensagem,
+            link_id: vagaSalva.id,
+          })
+        );
+
+        if (notificacoes.length > 0) {
+          await notificacaoRepository.save(notificacoes);
+        }
+      } catch (error) {
+        console.error("Erro ao criar notificações de nova vaga:", error);
+      }
 
       return res.status(201).json(vagaCompleta);
     } catch (error: any) {

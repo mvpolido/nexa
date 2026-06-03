@@ -54,7 +54,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
     if (token == null || token!.isEmpty) {
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/');
+      Navigator.of(context).pushReplacementNamed('/onboarding');
       return;
     }
 
@@ -369,8 +369,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        await carregarMinhasCandidaturas(); 
-        if (mounted) setState(() {});
+        await carregarDados();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemApi ?? 'Candidatura enviada com sucesso.')));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemApi ?? 'Erro ao processar candidatura.')));
@@ -383,9 +382,12 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    await prefs.remove('token');
+    await prefs.remove('user_id');
+    await prefs.remove('user_nome');
+    await prefs.remove('user_perfil');
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/');
+    Navigator.of(context).pushReplacementNamed('/onboarding');
   }
 
   String nomeEmpresa(dynamic vaga) {
@@ -747,6 +749,15 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                         margin: const EdgeInsets.only(right: 12),
                         decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
                         child: buildChatBadge(),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
+                        child: IconButton(
+                          tooltip: 'Atualizar vagas',
+                          icon: const Icon(Icons.refresh, color: Colors.black87, size: 22),
+                          onPressed: isLoading ? null : carregarDados,
+                        ),
                       ),
                       // 👤 O Perfil que já existia
                       GestureDetector(
