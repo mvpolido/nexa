@@ -1,9 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/notificacao_model.dart';
 import '../services/notificacao_service.dart';
 
 class SininhoNotificacao extends StatefulWidget {
-  const SininhoNotificacao({Key? key}) : super(key: key);
+  const SininhoNotificacao({super.key});
 
   @override
   State<SininhoNotificacao> createState() => _SininhoNotificacaoState();
@@ -13,15 +14,27 @@ class _SininhoNotificacaoState extends State<SininhoNotificacao> {
   final NotificacaoService _notificacaoService = NotificacaoService();
   List<NotificacaoModel> _notificacoes = [];
   bool _isLoading = true;
+  Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
     _carregarNotificacoes();
+    _pollingTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _carregarNotificacoes(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _carregarNotificacoes() async {
     final dados = await _notificacaoService.getNotificacoes();
+    if (!mounted) return;
     setState(() {
       _notificacoes = dados;
       _isLoading = false;
@@ -32,7 +45,7 @@ class _SininhoNotificacaoState extends State<SininhoNotificacao> {
   Future<void> _marcarComoLida(NotificacaoModel notificacao) async {
     if (!notificacao.lida) {
       await _notificacaoService.marcarComoLida(notificacao.id);
-      _carregarNotificacoes(); // Recarrega a lista para atualizar a bolinha vermelha
+      await _carregarNotificacoes();
     }
   }
 
@@ -120,6 +133,8 @@ class _SininhoNotificacaoState extends State<SininhoNotificacao> {
         return Icons.message;
       case 'NOVA_CANDIDATURA':
         return Icons.person_add;
+      case 'NOVA_VAGA':
+        return Icons.business_center;
       default:
         return Icons.notifications;
     }

@@ -226,7 +226,18 @@ export class CandidaturaController {
         });
       }
 
+      const empresaRepository = AppDataSource.getRepository(Empresa);
       const candidaturaRepository = AppDataSource.getRepository(Candidatura);
+
+      const empresa = await empresaRepository.findOne({
+        where: { usuario: { id: usuarioLogadoId } },
+      });
+
+      if (!empresa) {
+        return res.status(404).json({
+          message: "Perfil de empresa não encontrado para este usuário.",
+        });
+      }
 
       const candidatura = await candidaturaRepository.findOne({
         where: {
@@ -241,7 +252,7 @@ export class CandidaturaController {
         });
       }
 
-      if (candidatura.vaga.empresa_id !== usuarioLogadoId) {
+      if (candidatura.vaga.empresa_id !== empresa.id) {
         return res.status(403).json({
           message:
             "Você só pode alterar candidaturas de vagas da sua própria empresa.",
@@ -256,7 +267,7 @@ export class CandidaturaController {
         usuario_id: candidatura.aluno_id,
         tipo: "STATUS_CANDIDATURA",
         titulo: "Status da candidatura atualizado",
-        mensagem: `O status da sua candidatura para a vaga "${candidatura.vaga.titulo}" foi atualizado.`,
+        mensagem: `O status da sua candidatura para a vaga "${candidatura.vaga.titulo}" foi atualizado para ${status}.`,
         link_id: candidatura.id,
       });
 

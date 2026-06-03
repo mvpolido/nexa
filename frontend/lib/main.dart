@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
@@ -11,6 +12,49 @@ import 'pages/company_profile_page.dart'; // novo Import
 
 void main() {
   runApp(const NexaApp());
+}
+
+const String unauthenticatedRoute = '/onboarding';
+
+class SessionGate extends StatefulWidget {
+  const SessionGate({super.key});
+
+  @override
+  State<SessionGate> createState() => _SessionGateState();
+}
+
+class _SessionGateState extends State<SessionGate> {
+  bool _isLoading = true;
+  bool _hasSession = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSession();
+  }
+
+  Future<void> _checkSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+
+    if (!mounted) return;
+
+    setState(() {
+      _hasSession = token != null && token.trim().isNotEmpty;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return _hasSession ? const HomePage() : const OnboardingPage();
+  }
 }
 
 class NexaApp extends StatelessWidget {
@@ -58,9 +102,9 @@ class NexaApp extends StatelessWidget {
           ),
         ),
       ),
-      // AQUI FOI FEITA A ALTERAÇÃO:
-      initialRoute: '/onboarding',
+      initialRoute: '/session',
       routes: {
+        '/session': (context) => const SessionGate(),
         '/onboarding': (context) => const OnboardingPage(), 
         '/student-profile': (context) => const StudentProfilePage(),
         '/welcome': (context) => const AuthSelectionScreen(), 

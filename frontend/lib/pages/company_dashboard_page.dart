@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/skill_selector.dart';
 import '../config/api_config.dart';
-import 'chat_page.dart'; 
-import 'chat_list_page.dart'; 
+import 'chat_page.dart';
+import 'chat_list_page.dart';
 import '../widgets/sininho_notificacao.dart';
 
 class CompanyDashboardPage extends StatefulWidget {
@@ -20,7 +20,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   bool isLoading = true;
   String? token;
   String? nome;
-  int? meuUsuarioId; 
+  int? meuUsuarioId;
 
   int selectedMenuIndex = 0;
 
@@ -38,7 +38,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
     token = prefs.getString('token');
     nome = prefs.getString('user_nome');
-    
+
     final rawUserId = prefs.get('user_id');
     if (rawUserId is int) {
       meuUsuarioId = rawUserId;
@@ -48,14 +48,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
     if (token == null || token!.isEmpty) {
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/');
+      Navigator.of(context).pushReplacementNamed('/onboarding');
       return;
     }
 
-    await Future.wait([
-        carregarHabilidades(),
-        carregarVagas(),
-    ]);
+    await Future.wait([carregarHabilidades(), carregarVagas()]);
   }
 
   bool vagaArquivada(dynamic vaga) {
@@ -72,22 +69,19 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   Future<void> carregarHabilidades() async {
     try {
-        final response = await http.get(
+      final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/habilidades'),
-        headers: {
-            'Authorization': 'Bearer $token',
-        },
-        );
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-        if (response.statusCode == 200) {
+      if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
         if (data is List) {
-            habilidadesDisponiveis = data;
+          habilidadesDisponiveis = data;
         }
-        }
-    } catch (_) {
-    }
+      }
+    } catch (_) {}
   }
 
   Future<void> carregarVagas() async {
@@ -98,9 +92,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/vagas'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (!mounted) return;
@@ -136,10 +128,13 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    await prefs.remove('token');
+    await prefs.remove('user_id');
+    await prefs.remove('user_nome');
+    await prefs.remove('user_perfil');
 
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/');
+    Navigator.of(context).pushReplacementNamed('/onboarding');
   }
 
   Future<void> abrirFormularioVaga({dynamic vaga}) async {
@@ -168,8 +163,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       modalidade = 'REMOTO';
     }
 
-    Set<int> habilidadeIdsSelecionadas =
-    editando ? habilidadeIdsDaVaga(vaga) : <int>{};
+    Set<int> habilidadeIdsSelecionadas = editando
+        ? habilidadeIdsDaVaga(vaga)
+        : <int>{};
 
     final formKey = GlobalKey<FormState>();
 
@@ -180,7 +176,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
-    Future<void> salvar() async {
+            Future<void> salvar() async {
               if (!(formKey.currentState?.validate() ?? false)) return;
 
               setDialogState(() {
@@ -189,11 +185,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
               try {
                 final body = jsonEncode({
-                'titulo': tituloController.text.trim(),
-                'descricao': descricaoController.text.trim(),
-                'requisitos': requisitosController.text.trim(),
-                'modalidade': modalidade,
-                'habilidadeIds': habilidadeIdsSelecionadas.toList(),
+                  'titulo': tituloController.text.trim(),
+                  'descricao': descricaoController.text.trim(),
+                  'requisitos': requisitosController.text.trim(),
+                  'modalidade': modalidade,
+                  'habilidadeIds': habilidadeIdsSelecionadas.toList(),
                 });
 
                 final response = editando
@@ -238,9 +234,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                     mensagem = data['message'] ?? mensagem;
                   }
 
-                  ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-                    SnackBar(content: Text(mensagem)),
-                  );
+                  ScaffoldMessenger.of(
+                    scaffoldContext,
+                  ).showSnackBar(SnackBar(content: Text(mensagem)));
 
                   if (mounted) {
                     setDialogState(() {
@@ -318,44 +314,44 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                              value: modalidade,
-                            decoration: const InputDecoration(
-                                labelText: 'Modalidade',
-                                border: OutlineInputBorder(),
+                          value: modalidade,
+                          decoration: const InputDecoration(
+                            labelText: 'Modalidade',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'REMOTO',
+                              child: Text('Remoto'),
                             ),
-                            items: const [
-                                DropdownMenuItem(
-                                value: 'REMOTO',
-                                child: Text('Remoto'),
-                                ),
-                                DropdownMenuItem(
-                                value: 'PRESENCIAL',
-                                child: Text('Presencial'),
-                                ),
-                                DropdownMenuItem(
-                                value: 'HIBRIDO',
-                                child: Text('Híbrido'),
-                                ),
-                            ],
-                            onChanged: (value) {
-                                if (value == null) return;
+                            DropdownMenuItem(
+                              value: 'PRESENCIAL',
+                              child: Text('Presencial'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'HIBRIDO',
+                              child: Text('Híbrido'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
 
-                                setDialogState(() {
-                                modalidade = value;
-                                });
-                            },
-                            ),
-                            const SizedBox(height: 16),
-                            SkillSelector(
-                            title: 'Habilidades exigidas pela vaga',
-                            habilidades: habilidadesDisponiveis,
-                            selectedIds: habilidadeIdsSelecionadas,
-                            onChanged: (updated) {
-                                setDialogState(() {
-                                habilidadeIdsSelecionadas = updated;
-                                });
-                            },
-                            ),
+                            setDialogState(() {
+                              modalidade = value;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        SkillSelector(
+                          title: 'Habilidades exigidas pela vaga',
+                          habilidades: habilidadesDisponiveis,
+                          selectedIds: habilidadeIdsSelecionadas,
+                          onChanged: (updated) {
+                            setDialogState(() {
+                              habilidadeIdsSelecionadas = updated;
+                            });
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -452,9 +448,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     try {
       final response = await http.patch(
         Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId/arquivar'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (!mounted) return;
@@ -473,9 +467,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           mensagem = data['message'] ?? mensagem;
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagem)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(mensagem)));
       }
     } catch (_) {
       if (!mounted) return;
@@ -490,9 +484,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     try {
       final response = await http.patch(
         Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId/desarquivar'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (!mounted) return;
@@ -511,9 +503,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           mensagem = data['message'] ?? mensagem;
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagem)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(mensagem)));
       }
     } catch (_) {
       if (!mounted) return;
@@ -538,9 +530,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/vagas/$vagaId/candidaturas'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (!mounted) return;
@@ -569,98 +559,96 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   }
 
   String labelStatusCandidatura(String status) {
-      switch (status) {
-          case 'PENDENTE':
-          return 'Pendente';
-          case 'ACEITA':
-          return 'Aceita';
-          case 'REJEITADA':
-          return 'Rejeitada';
-          default:
-          return status;
-      }
+    switch (status) {
+      case 'PENDENTE':
+        return 'Pendente';
+      case 'ACEITA':
+        return 'Aceita';
+      case 'REJEITADA':
+        return 'Rejeitada';
+      default:
+        return status;
+    }
   }
 
   IconData iconeStatusCandidatura(String status) {
-      switch (status) {
-          case 'PENDENTE':
-          return Icons.hourglass_empty;
-          case 'ACEITA':
-          return Icons.check_circle_outline;
-          case 'REJEITADA':
-          return Icons.cancel_outlined;
-          default:
-          return Icons.info_outline;
-      }
+    switch (status) {
+      case 'PENDENTE':
+        return Icons.hourglass_empty;
+      case 'ACEITA':
+        return Icons.check_circle_outline;
+      case 'REJEITADA':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.info_outline;
+    }
   }
 
   double? matchPercent(dynamic item) {
-      final value = item['match_percent'] ?? item['pontuacao_compatibilidade'];
+    final value = item['match_percent'] ?? item['pontuacao_compatibilidade'];
 
-      if (value is num) return value.toDouble();
-      if (value is String) return double.tryParse(value);
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
 
-      return null;
+    return null;
   }
 
   Widget chipMatch(double? match) {
-      if (match == null) return const SizedBox.shrink();
+    if (match == null) return const SizedBox.shrink();
 
-      return Chip(
-          avatar: const Icon(Icons.insights, size: 18),
-          label: Text('${match.round()}% match'),
-      );
+    return Chip(
+      avatar: const Icon(Icons.insights, size: 18),
+      label: Text('${match.round()}% match'),
+    );
   }
 
   Future<bool> atualizarStatusCandidatura({
-      required int candidaturaId,
-      required String novoStatus,
-      }) async {
-      try {
-          final response = await http.patch(
-          Uri.parse('${ApiConfig.baseUrl}/candidaturas/$candidaturaId/status'),
-          headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode({
-              'status': novoStatus,
-          }),
-          );
+    required int candidaturaId,
+    required String novoStatus,
+  }) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/candidaturas/$candidaturaId/status'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'status': novoStatus}),
+      );
 
-          if (!mounted) return false;
+      if (!mounted) return false;
 
-          if (response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-              content: Text('Status da candidatura atualizado com sucesso.'),
-              ),
-          );
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Status da candidatura atualizado com sucesso.'),
+          ),
+        );
 
-          return true;
-          }
-
-          String mensagem = 'Erro ao atualizar status da candidatura.';
-
-          if (response.body.isNotEmpty) {
-          final data = jsonDecode(response.body);
-          mensagem = data['message'] ?? mensagem;
-          }
-
-          ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagem)),
-          );
-
-          return false;
-      } catch (_) {
-          if (!mounted) return false;
-
-          ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro de conexão com o servidor.')),
-          );
-
-          return false;
+        return true;
       }
+
+      String mensagem = 'Erro ao atualizar status da candidatura.';
+
+      if (response.body.isNotEmpty) {
+        final data = jsonDecode(response.body);
+        mensagem = data['message'] ?? mensagem;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mensagem)));
+
+      return false;
+    } catch (_) {
+      if (!mounted) return false;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro de conexão com o servidor.')),
+      );
+
+      return false;
+    }
   }
 
   void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
@@ -673,94 +661,169 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: Text('Candidatos - ${vaga['titulo'] ?? 'Vaga'}'),
-              content: SizedBox(
-                width: 760,
-                child: candidaturasDialog.isEmpty
-                    ? const Text('Nenhum candidato encontrado para esta vaga.')
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: candidaturasDialog.length,
-                        separatorBuilder: (_, __) => const Divider(),
-                        itemBuilder: (context, index) {
-                          final candidatura = candidaturasDialog[index];
-                          final aluno = candidatura['aluno'];
-                          final usuario = aluno?['usuario'];
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 760,
+                  maxHeight: MediaQuery.of(context).size.height * 0.72,
+                ),
+                child: SingleChildScrollView(
+                  child: candidaturasDialog.isEmpty
+                      ? const Text(
+                          'Nenhum candidato encontrado para esta vaga.',
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(candidaturasDialog.length, (
+                            index,
+                          ) {
+                            final candidatura = candidaturasDialog[index];
+                            final aluno = candidatura['aluno'];
+                            final usuario = aluno?['usuario'];
+                            final candidaturaId = candidatura['id'];
+                            final nomeAluno =
+                                usuario?['nome_exibicao'] ??
+                                usuario?['nome'] ??
+                                'Aluno sem nome';
+                            final curso =
+                                aluno?['curso'] ?? 'Curso não informado';
+                            final statusAtual =
+                                candidatura['status']?.toString() ?? 'PENDENTE';
+                            final statusDropdown =
+                                [
+                                  'PENDENTE',
+                                  'ACEITA',
+                                  'REJEITADA',
+                                ].contains(statusAtual)
+                                ? statusAtual
+                                : 'PENDENTE';
+                            final match = matchPercent(candidatura);
+                            final curriculoPath = candidatura['curriculo_path']
+                                ?.toString();
+                            final temCurriculo =
+                                curriculoPath != null &&
+                                curriculoPath != 'null' &&
+                                curriculoPath.isNotEmpty;
 
-                          final candidaturaId = candidatura['id'];
-
-                          final nomeAluno = usuario?['nome_exibicao'] ??
-                              usuario?['nome'] ??
-                              'Aluno sem nome';
-
-                          final curso = aluno?['curso'] ?? 'Curso não informado';
-                          final statusAtual =
-                              candidatura['status']?.toString() ?? 'PENDENTE';
-                          final match = matchPercent(candidatura);
-
-                          return ListTile(
-                            leading: CircleAvatar(
-                              child: Icon(iconeStatusCandidatura(statusAtual)),
-                            ),
-                            title: Text(nomeAluno),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 6),
+                            return Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Curso: $curso'),
-                                  
-                                  if (candidatura['curriculo_path'] != null && candidatura['curriculo_path'].toString().isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    TextButton.icon(
-                                      style: TextButton.styleFrom(
-                                        padding: EdgeInsets.zero,
-                                        minimumSize: const Size(0, 0),
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      onPressed: () {
-                                        final String? path = candidatura['curriculo_path']?.toString();
-  
-                                        if (path != null && path != 'null' && path.isNotEmpty) {
-                                          final String urlCompleta = '${ApiConfig.baseUrl}/files/curriculos/$path';
-                                          importHTML.window.open(urlCompleta, '_blank');
-                                        } else {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(content: Text('Erro: Arquivo do currículo não encontrado para este candidato.')),
-                                          );
-                                        }
-                                      },
-                                      icon: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 16),
-                                      label: const Text(
-                                        'Visualizar Currículo',
-                                        style: TextStyle(
-                                          color: Colors.blue,
-                                          fontSize: 13,
-                                          decoration: TextDecoration.underline,
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      CircleAvatar(
+                                        child: Icon(
+                                          iconeStatusCandidatura(statusAtual),
                                         ),
                                       ),
-                                    ),
-                                  ],
-
-                                  const SizedBox(height: 6),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              nomeAluno,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Curso: $curso',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: Colors.grey.shade700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
                                   Wrap(
                                     spacing: 8,
-                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    runSpacing: 8,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
                                     children: [
                                       Chip(
                                         avatar: Icon(
                                           iconeStatusCandidatura(statusAtual),
                                           size: 18,
                                         ),
-                                        label: Text(labelStatusCandidatura(statusAtual)),
+                                        label: Text(
+                                          labelStatusCandidatura(statusAtual),
+                                        ),
                                       ),
                                       chipMatch(match),
-                                      
-                                      if (statusAtual == 'ACEITA' && meuUsuarioId != null)
+                                      if (temCurriculo)
+                                        TextButton.icon(
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            minimumSize: const Size(0, 32),
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
+                                          onPressed: () {
+                                            if (curriculoPath.isNotEmpty) {
+                                              final String urlCompleta =
+                                                  '${ApiConfig.baseUrl}/files/curriculos/$curriculoPath';
+                                              importHTML.window.open(
+                                                urlCompleta,
+                                                '_blank',
+                                              );
+                                            } else {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Erro: Arquivo do currículo não encontrado para este candidato.',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                          icon: const Icon(
+                                            Icons.picture_as_pdf,
+                                            color: Colors.red,
+                                            size: 16,
+                                          ),
+                                          label: const Text(
+                                            'Visualizar Currículo',
+                                            style: TextStyle(fontSize: 13),
+                                          ),
+                                        ),
+                                      if (statusAtual == 'ACEITA' &&
+                                          meuUsuarioId != null)
                                         ElevatedButton.icon(
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFF10B981),
+                                            backgroundColor: const Color(
+                                              0xFF10B981,
+                                            ),
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 0,
+                                            ),
                                             minimumSize: const Size(0, 32),
                                           ),
                                           onPressed: () {
@@ -770,75 +833,83 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                                               MaterialPageRoute(
                                                 builder: (context) => ChatPage(
                                                   candidaturaId: candidaturaId,
-                                                  vagaTitulo: vaga['titulo'] ?? 'Vaga',
+                                                  vagaTitulo:
+                                                      vaga['titulo'] ?? 'Vaga',
                                                   token: token!,
                                                   meuUsuarioId: meuUsuarioId!,
-                                                  isAluno: false, // 👈 EMPRESA ABRINDO O CHAT
+                                                  isAluno: false,
                                                 ),
                                               ),
                                             );
                                           },
-                                          icon: const Icon(Icons.chat, size: 16),
-                                          label: const Text('Abrir Chat', style: TextStyle(fontSize: 12)),
+                                          icon: const Icon(
+                                            Icons.chat,
+                                            size: 16,
+                                          ),
+                                          label: const Text(
+                                            'Abrir Chat',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
                                         ),
                                     ],
                                   ),
+                                  const SizedBox(height: 12),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 260,
+                                    ),
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: statusDropdown,
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Alterar status',
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'PENDENTE',
+                                          child: Text('Pendente'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'ACEITA',
+                                          child: Text('Aceita'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'REJEITADA',
+                                          child: Text('Rejeitada'),
+                                        ),
+                                      ],
+                                      onChanged: candidaturaId == null
+                                          ? null
+                                          : (novoStatus) async {
+                                              if (novoStatus == null ||
+                                                  novoStatus == statusAtual) {
+                                                return;
+                                              }
+
+                                              final sucesso =
+                                                  await atualizarStatusCandidatura(
+                                                    candidaturaId:
+                                                        candidaturaId,
+                                                    novoStatus: novoStatus,
+                                                  );
+
+                                              if (!sucesso) return;
+
+                                              setDialogState(() {
+                                                candidaturasDialog[index]['status'] =
+                                                    novoStatus;
+                                              });
+                                            },
+                                    ),
+                                  ),
                                 ],
                               ),
-                            ),
-                            trailing: SizedBox(
-                              width: 170,
-                              child: DropdownButtonFormField<String>(
-                                value: ['PENDENTE', 'ACEITA', 'REJEITADA']
-                                        .contains(statusAtual)
-                                    ? statusAtual
-                                    : 'PENDENTE',
-                                decoration: const InputDecoration(
-                                  labelText: 'Status',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'PENDENTE',
-                                    child: Text('Pendente'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'ACEITA',
-                                    child: Text('Aceita'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'REJEITADA',
-                                    child: Text('Rejeitada'),
-                                  ),
-                                ],
-                                onChanged: candidaturaId == null
-                                    ? null
-                                    : (novoStatus) async {
-                                        if (novoStatus == null ||
-                                            novoStatus == statusAtual) {
-                                          return;
-                                        }
-
-                                        final sucesso =
-                                            await atualizarStatusCandidatura(
-                                          candidaturaId: candidaturaId,
-                                          novoStatus: novoStatus,
-                                        );
-
-                                        if (!sucesso) return;
-
-                                        setDialogState(() {
-                                          candidaturasDialog[index]['status'] =
-                                              novoStatus;
-                                        });
-                                      },
-                              ),
-                            ),
-                            isThreeLine: true,
-                          );
-                        },
-                      ),
+                            );
+                          }),
+                        ),
+                ),
               ),
               actions: [
                 TextButton(
@@ -867,10 +938,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
     if (legado is List) {
       return legado
-          .map((nome) => {
-                'id': null,
-                'nome': nome.toString(),
-              })
+          .map((nome) => {'id': null, 'nome': nome.toString()})
           .toList();
     }
 
@@ -886,21 +954,21 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   Widget chipsHabilidades(List<dynamic> habilidades) {
     if (habilidades.isEmpty) {
-        return const Text(
+      return const Text(
         'Nenhuma habilidade selecionada.',
         style: TextStyle(fontStyle: FontStyle.italic),
-        );
+      );
     }
 
     return Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: habilidades.map((habilidade) {
+      spacing: 8,
+      runSpacing: 8,
+      children: habilidades.map((habilidade) {
         return Chip(
-            avatar: const Icon(Icons.label_outline, size: 18),
-            label: Text(habilidade['nome'] ?? 'Sem nome'),
+          avatar: const Icon(Icons.label_outline, size: 18),
+          label: Text(habilidade['nome'] ?? 'Sem nome'),
         );
-        }).toList(),
+      }).toList(),
     );
   }
 
@@ -945,13 +1013,13 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                   ),
                 ],
               ),
-                const SizedBox(height: 12),
-                const Text(
+              const SizedBox(height: 12),
+              const Text(
                 'Habilidades exigidas',
                 style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                chipsHabilidades(habilidadesDaVaga(vaga)),
+              ),
+              const SizedBox(height: 6),
+              chipsHabilidades(habilidadesDaVaga(vaga)),
 
               if ((vaga['requisitos'] ?? '').toString().isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -967,8 +1035,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                 runSpacing: 8,
                 children: [
                   OutlinedButton.icon(
-                    onPressed:
-                        arquivada ? null : () => abrirFormularioVaga(vaga: vaga),
+                    onPressed: arquivada
+                        ? null
+                        : () => abrirFormularioVaga(vaga: vaga),
                     icon: const Icon(Icons.edit),
                     label: const Text('Editar'),
                   ),
@@ -1080,7 +1149,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   Future<int> buscarContagemChats() async {
     try {
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/chats/contagem'), 
+        Uri.parse('${ApiConfig.baseUrl}/chats/contagem'),
         headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
@@ -1092,20 +1161,29 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   Widget buildChatBadge() {
     return FutureBuilder<int>(
-      future: buscarContagemChats(), 
+      future: buscarContagemChats(),
       builder: (context, snapshot) {
         final count = snapshot.data ?? 0;
         return Badge(
-          label: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 11)),
+          label: Text(
+            '$count',
+            style: const TextStyle(color: Colors.white, fontSize: 11),
+          ),
           isLabelVisible: count > 0,
           backgroundColor: const Color(0xFF7C3AED),
           child: IconButton(
             icon: const Icon(Icons.chat_bubble_outline, color: Colors.black87),
             tooltip: 'Mensagens/Chats',
             onPressed: () {
-              Navigator.push(context, MaterialPageRoute(
-                builder: (context) => ChatListPage(token: token!, isAluno: false), // 👈 EMPRESA ABRINDO A LISTA
-              ));
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatListPage(
+                    token: token!,
+                    isAluno: false,
+                  ), // 👈 EMPRESA ABRINDO A LISTA
+                ),
+              );
             },
           ),
         );
@@ -1119,12 +1197,15 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard da Empresa', style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Dashboard da Empresa',
+          style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
         actions: [
-          // 🔔  WIDGET DE SININHO 
+          // 🔔  WIDGET DE SININHO
           const Padding(
             padding: EdgeInsets.only(top: 8.0, right: 4.0),
             child: SininhoNotificacao(),

@@ -47,9 +47,9 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('token');
 
-    if (_token == null) {
+    if (_token == null || _token!.isEmpty) {
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/');
+      Navigator.pushReplacementNamed(context, '/onboarding');
       return;
     }
 
@@ -206,9 +206,12 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
 
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    await prefs.remove('token');
+    await prefs.remove('user_id');
+    await prefs.remove('user_nome');
+    await prefs.remove('user_perfil');
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/');
+    Navigator.pushReplacementNamed(context, '/onboarding');
   }
 
   // ---- WIDGETS DE UI ----
