@@ -6,6 +6,7 @@ import { Aluno } from "../entities/Aluno";
 import { Empresa } from "../entities/Empresa";
 import { UsuarioPerfil } from "../entities/Usuario";
 import { Mensagem } from "../entities/Mensagem";
+import { Notificacao } from "../entities/Notificacao";
 
 export class CandidaturaController {
   static async candidatar(req: Request, res: Response) {
@@ -74,6 +75,16 @@ export class CandidaturaController {
       });
 
       const candidaturaSalva = await candidaturaRepository.save(novaCandidatura);
+      const notificacaoRepository = AppDataSource.getRepository(Notificacao);
+      const notificacaoEmpresa = notificacaoRepository.create({
+        usuario_id: vaga.empresa_id,
+        tipo: "NOVA_CANDIDATURA",
+        titulo: "Nova candidatura recebida",
+        mensagem: `Uma nova candidatura foi recebida para a vaga "${vaga.titulo}".`,
+        link_id: candidaturaSalva.id,
+      });
+
+      await notificacaoRepository.save(notificacaoEmpresa);
 
       return res.status(201).json({
         message: "Candidatura realizada com sucesso.",
@@ -240,6 +251,16 @@ export class CandidaturaController {
       candidatura.status = status;
 
       const candidaturaAtualizada = await candidaturaRepository.save(candidatura);
+      const notificacaoRepository = AppDataSource.getRepository(Notificacao);
+      const notificacaoAluno = notificacaoRepository.create({
+        usuario_id: candidatura.aluno_id,
+        tipo: "STATUS_CANDIDATURA",
+        titulo: "Status da candidatura atualizado",
+        mensagem: `O status da sua candidatura para a vaga "${candidatura.vaga.titulo}" foi atualizado.`,
+        link_id: candidatura.id,
+      });
+
+      await notificacaoRepository.save(notificacaoAluno);
 
       // Gatilho do Chat: Mensagem Automática de Aceite
       if (status === "ACEITA" || status === CandidaturaStatus.ACEITA) {

@@ -8,6 +8,7 @@ import '../config/api_config.dart';
 import '../widgets/skill_selector.dart';
 import 'chat_page.dart'; 
 import 'chat_list_page.dart';
+import '../widgets/sininho_notificacao.dart';
 
 class StudentJobsPage extends StatefulWidget {
   const StudentJobsPage({super.key});
@@ -735,11 +736,19 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                   const SizedBox.shrink(),
                   Row(
                     children: [
+                      // 🔔 O SININHO ENTRA AQUI!
+                      Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
+                        child: const SininhoNotificacao(),
+                      ),
+                      // 💬 O Chat que já existia
                       Container(
                         margin: const EdgeInsets.only(right: 12),
                         decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
                         child: buildChatBadge(),
                       ),
+                      // 👤 O Perfil que já existia
                       GestureDetector(
                         onTap: () => Navigator.pushNamed(context, '/student-profile'),
                         child: Container(
