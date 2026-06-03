@@ -20,6 +20,7 @@ import alunoRoutes from './routes/aluno.routes';
 import { empresaRoutes } from './routes/empresa.routes';
 import candidaturaRoutes from './routes/candidatura.routes';
 import chatRoutes from "./routes/chat.routes"; // 👈 Importação da rota de chat
+import notificacaoRoutes from './routes/notificacao.routes';
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use('/users', userRoutes);
 app.use('/vagas', vagaRoutes);
 app.use('/habilidades', habilidadeRoutes);
 app.use('/alunos', alunoRoutes);
+app.use('/notificacoes', notificacaoRoutes);
 app.use(candidaturaRoutes);
 app.use(chatRoutes); // 🛠️ O QUE FALTAVA: Registro da rota para o Express reconhecer!
 
