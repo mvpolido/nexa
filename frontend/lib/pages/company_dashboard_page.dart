@@ -1,5 +1,6 @@
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:convert';
-import 'dart:html' as importHTML;
+import 'dart:html' as import_html;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -213,8 +214,10 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                 if (!mounted) return;
 
                 if (response.statusCode == 200 || response.statusCode == 201) {
+                  if (!dialogContext.mounted) return;
                   Navigator.of(dialogContext).pop();
 
+                  if (!scaffoldContext.mounted) return;
                   ScaffoldMessenger.of(scaffoldContext).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -234,6 +237,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                     mensagem = data['message'] ?? mensagem;
                   }
 
+                  if (!scaffoldContext.mounted) return;
                   ScaffoldMessenger.of(
                     scaffoldContext,
                   ).showSnackBar(SnackBar(content: Text(mensagem)));
@@ -245,8 +249,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                   }
                 }
               } catch (_) {
-                if (!mounted) return;
-
+                if (!scaffoldContext.mounted) return;
                 ScaffoldMessenger.of(scaffoldContext).showSnackBar(
                   const SnackBar(
                     content: Text('Erro de conexão com o servidor.'),
@@ -314,7 +317,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: modalidade,
+                          initialValue: modalidade,
                           decoration: const InputDecoration(
                             labelText: 'Modalidade',
                             border: OutlineInputBorder(),
@@ -786,7 +789,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                                             if (curriculoPath.isNotEmpty) {
                                               final String urlCompleta =
                                                   '${ApiConfig.baseUrl}/files/curriculos/$curriculoPath';
-                                              importHTML.window.open(
+                                              import_html.window.open(
                                                 urlCompleta,
                                                 '_blank',
                                               );
@@ -952,11 +955,13 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         .toSet();
   }
 
+  // 🛠️ MÉTODOS VISUAIS E RESPONSIVOS (ISSUE #97) 
+
   Widget chipsHabilidades(List<dynamic> habilidades) {
     if (habilidades.isEmpty) {
       return const Text(
         'Nenhuma habilidade selecionada.',
-        style: TextStyle(fontStyle: FontStyle.italic),
+        style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
       );
     }
 
@@ -964,9 +969,21 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       spacing: 8,
       runSpacing: 8,
       children: habilidades.map((habilidade) {
-        return Chip(
-          avatar: const Icon(Icons.label_outline, size: 18),
-          label: Text(habilidade['nome'] ?? 'Sem nome'),
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF7C3AED).withAlpha(20), // 0.08
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFF7C3AED).withAlpha(51)), // 0.2
+          ),
+          child: Text(
+            habilidade['nome'] ?? 'Sem nome',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF7C3AED),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         );
       }).toList(),
     );
@@ -975,86 +992,125 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   Widget cardVaga(dynamic vaga) {
     final bool arquivada = vagaArquivada(vaga);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(10), // 0.04
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade100),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Opacity(
-          opacity: arquivada ? 0.78 : 1,
+          opacity: arquivada ? 0.6 : 1,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                vaga['titulo'] ?? 'Sem título',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(vaga['descricao'] ?? 'Sem descrição.'),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Chip(
-                    label: Text(vaga['modalidade'] ?? '-'),
-                    avatar: const Icon(Icons.work_outline, size: 18),
-                  ),
-                  Chip(
-                    label: Text(arquivada ? 'Arquivada' : 'Ativa'),
-                    avatar: Icon(
-                      arquivada
-                          ? Icons.archive_outlined
-                          : Icons.check_circle_outline,
-                      size: 18,
+                  Expanded(
+                    child: Text(
+                      vaga['titulo'] ?? 'Sem título',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1F2937),
+                      ),
                     ),
                   ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: arquivada ? Colors.grey.shade100 : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      arquivada ? 'Arquivada' : 'Ativa',
+                      style: TextStyle(
+                        color: arquivada ? Colors.grey.shade600 : Colors.green.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  )
                 ],
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Habilidades exigidas',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              chipsHabilidades(habilidadesDaVaga(vaga)),
-
-              if ((vaga['requisitos'] ?? '').toString().isNotEmpty) ...[
-                const SizedBox(height: 12),
-                const Text(
-                  'Requisitos',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(vaga['requisitos']),
-              ],
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              
+              Row(
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: arquivada
-                        ? null
-                        : () => abrirFormularioVaga(vaga: vaga),
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Editar'),
+                  Icon(Icons.work_outline, size: 16, color: Colors.grey.shade500),
+                  const SizedBox(width: 6),
+                  Text(
+                    vaga['modalidade'] ?? '-',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              Text(
+                vaga['descricao'] ?? 'Sem descrição.',
+                style: TextStyle(color: Colors.grey.shade600, height: 1.4, fontSize: 14),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              
+              const SizedBox(height: 16),
+              chipsHabilidades(habilidadesDaVaga(vaga)),
+              
+              const SizedBox(height: 20),
+              const Divider(color: Color(0xFFF3F4F6)),
+              const SizedBox(height: 12),
+
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.start,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => verCandidatos(vaga),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7C3AED),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                    icon: const Icon(Icons.people_alt_outlined, size: 18),
+                    label: const Text('Ver Candidatos', style: TextStyle(fontWeight: FontWeight.w600)),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => verCandidatos(vaga),
-                    icon: const Icon(Icons.people),
-                    label: const Text('Ver candidatos'),
+                    onPressed: arquivada ? null : () => abrirFormularioVaga(vaga: vaga),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey.shade700,
+                      side: BorderSide(color: Colors.grey.shade300),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Editar'),
                   ),
                   OutlinedButton.icon(
                     onPressed: arquivada
                         ? () => confirmarDesarquivamento(vaga)
                         : () => confirmarArquivamento(vaga),
-                    icon: Icon(
-                      arquivada
-                          ? Icons.unarchive_outlined
-                          : Icons.archive_outlined,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: arquivada ? Colors.green.shade600 : Colors.red.shade400,
+                      side: BorderSide(color: arquivada ? Colors.green.shade200 : Colors.red.shade200),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
+                    icon: Icon(arquivada ? Icons.unarchive_outlined : Icons.archive_outlined, size: 18),
                     label: Text(arquivada ? 'Desarquivar' : 'Arquivar'),
                   ),
                 ],
@@ -1064,86 +1120,6 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         ),
       ),
     );
-  }
-
-  Widget listaDeVagas(List<dynamic> lista, String mensagemVazia) {
-    if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (lista.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(mensagemVazia, textAlign: TextAlign.center),
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: carregarVagas,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: lista.length,
-        itemBuilder: (context, index) {
-          return cardVaga(lista[index]);
-        },
-      ),
-    );
-  }
-
-  Widget conteudoSelecionado() {
-    if (selectedMenuIndex == 0) {
-      return listaDeVagas(
-        vagasAtivas,
-        'Sua empresa não possui vagas ativas no momento.',
-      );
-    }
-
-    return listaDeVagas(
-      vagasArquivadas,
-      'Sua empresa não possui vagas arquivadas no momento.',
-    );
-  }
-
-  Widget menuLateral() {
-    return NavigationRail(
-      selectedIndex: selectedMenuIndex,
-      onDestinationSelected: (index) {
-        setState(() {
-          selectedMenuIndex = index;
-        });
-      },
-      labelType: NavigationRailLabelType.all,
-      destinations: [
-        NavigationRailDestination(
-          icon: const Icon(Icons.work_outline),
-          selectedIcon: const Icon(Icons.work),
-          label: Text('Vagas ativas (${vagasAtivas.length})'),
-        ),
-        NavigationRailDestination(
-          icon: const Icon(Icons.archive_outlined),
-          selectedIcon: const Icon(Icons.archive),
-          label: Text('Arquivadas (${vagasArquivadas.length})'),
-        ),
-      ],
-    );
-  }
-
-  String tituloTela() {
-    if (selectedMenuIndex == 0) {
-      return 'Vagas ativas';
-    }
-
-    return 'Vagas arquivadas';
-  }
-
-  String subtituloTela() {
-    if (selectedMenuIndex == 0) {
-      return 'Vagas visíveis para alunos e abertas para candidatura.';
-    }
-
-    return 'Vagas ocultas para alunos, com histórico de candidatos preservado.';
   }
 
   Future<int> buscarContagemChats() async {
@@ -1181,7 +1157,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                   builder: (context) => ChatListPage(
                     token: token!,
                     isAluno: false,
-                  ), // 👈 EMPRESA ABRINDO A LISTA
+                  ),
                 ),
               );
             },
@@ -1191,21 +1167,147 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     );
   }
 
+  Widget _buildCardMetrica(String titulo, String valor, IconData icone, Color corBase) {
+    return Expanded(
+      flex: 1,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 140), // 👈 ERRO PRINCIPAL CORRIGIDO
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade100),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(5), // 0.02
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: corBase.withAlpha(26), // 0.1
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icone, color: corBase, size: 24),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              valor,
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              titulo,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConteudoPrincipal() {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF7C3AED)));
+    }
+
+    final listaExibicao = selectedMenuIndex == 0 ? vagasAtivas : vagasArquivadas;
+
+    return RefreshIndicator(
+      color: const Color(0xFF7C3AED),
+      onRefresh: carregarVagas,
+      child: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          // CABEÇALHO DO DASHBOARD
+          const Text(
+            'Dashboard',
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            nome ?? 'Sua Empresa',
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 32),
+
+          // CARDS SUPERIORES
+          if (selectedMenuIndex == 0) ...[
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                Row(
+                  children: [
+                    _buildCardMetrica('Vagas Ativas', vagasAtivas.length.toString(), Icons.work_outline, const Color(0xFF7C3AED)),
+                    const SizedBox(width: 16),
+                    _buildCardMetrica('Vagas Arquivadas', vagasArquivadas.length.toString(), Icons.archive_outlined, Colors.orange),
+                  ],
+                ),
+                Row(
+                  children: [
+                    _buildCardMetrica('Total de Candidatos', '-', Icons.people_outline, Colors.blue),
+                    const SizedBox(width: 16),
+                    _buildCardMetrica('Novas Candidaturas', '-', Icons.fiber_new_outlined, Colors.green),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+          ],
+
+          // LISTA DE VAGAS
+          Text(
+            selectedMenuIndex == 0 ? 'Vagas Ativas' : 'Vagas Arquivadas',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+          ),
+          const SizedBox(height: 16),
+
+          if (listaExibicao.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Text(
+                  selectedMenuIndex == 0 
+                      ? 'Não possui vagas ativas no momento.' 
+                      : 'Não possui vagas arquivadas no momento.',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                ),
+              ),
+            )
+          else
+            ...listaExibicao.map((vaga) => cardVaga(vaga)),
+            
+          const SizedBox(height: 60), // Espaço pro botão flutuante não tapar o ultimo card
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 🛠️ RESPONSIVIDADE: Verifica se a tela é pequena (Mobile)
+    final bool isMobile = MediaQuery.of(context).size.width < 800;
     final bool mostrandoArquivadas = selectedMenuIndex == 1;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
         title: const Text(
-          'Dashboard da Empresa',
-          style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold),
+          'Nexa',
+          style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w900, color: Color(0xFF7C3AED)),
         ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
-        elevation: 0,
+        elevation: 1,
+        shadowColor: Colors.black.withAlpha(26), // 0.1
         actions: [
-          // 🔔  WIDGET DE SININHO
           const Padding(
             padding: EdgeInsets.only(top: 8.0, right: 4.0),
             child: SininhoNotificacao(),
@@ -1225,66 +1327,77 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           GestureDetector(
             onTap: () => Navigator.pushNamed(context, '/company-profile'),
             child: Container(
-              margin: const EdgeInsets.only(right: 12, left: 8),
+              margin: const EdgeInsets.only(right: 16, left: 8),
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: const Color(0xFF7C3AED), width: 2),
               ),
               child: const CircleAvatar(
-                radius: 18,
+                radius: 16,
                 backgroundColor: Color(0xFF7C3AED),
-                child: Icon(Icons.business, color: Colors.white, size: 20),
+                child: Icon(Icons.business, color: Colors.white, size: 18),
               ),
             ),
           ),
-          const SizedBox(width: 12),
         ],
       ),
+      
+      // 🛠️ MENU INFERIOR APENAS PARA MOBILE
+      bottomNavigationBar: isMobile
+          ? BottomNavigationBar(
+              currentIndex: selectedMenuIndex,
+              onTap: (index) => setState(() => selectedMenuIndex = index),
+              selectedItemColor: const Color(0xFF7C3AED),
+              unselectedItemColor: Colors.grey.shade500,
+              backgroundColor: Colors.white,
+              elevation: 8,
+              items: const [
+                BottomNavigationBarItem(icon: Icon(Icons.work_outline), activeIcon: Icon(Icons.work), label: 'Vagas Ativas'),
+                BottomNavigationBarItem(icon: Icon(Icons.archive_outlined), activeIcon: Icon(Icons.archive), label: 'Arquivadas'),
+              ],
+            )
+          : null,
+          
       floatingActionButton: mostrandoArquivadas
           ? null
           : FloatingActionButton.extended(
               onPressed: () => abrirFormularioVaga(),
-              icon: const Icon(Icons.add),
-              label: const Text('Nova vaga'),
+              backgroundColor: const Color(0xFF7C3AED),
+              elevation: 4,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('Nova vaga', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
-      body: Row(
-        children: [
-          menuLateral(),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            
+      body: isMobile
+          // Se for Mobile, ocupa a tela toda com o conteúdo
+          ? _buildConteudoPrincipal()
+          // Se for Desktop/Tablet, usa o menu lateral (NavigationRail)
+          : Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Olá, ${nome ?? 'empresa'}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        tituloTela(),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(subtituloTela()),
-                    ],
-                  ),
+                NavigationRail(
+                  selectedIndex: selectedMenuIndex,
+                  onDestinationSelected: (index) => setState(() => selectedMenuIndex = index),
+                  labelType: NavigationRailLabelType.all,
+                  selectedIconTheme: const IconThemeData(color: Color(0xFF7C3AED)),
+                  selectedLabelTextStyle: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.bold),
+                  destinations: [
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.work_outline),
+                      selectedIcon: const Icon(Icons.work),
+                      label: Text('Ativas (${vagasAtivas.length})'),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.archive_outlined),
+                      selectedIcon: const Icon(Icons.archive),
+                      label: Text('Arquivadas (${vagasArquivadas.length})'),
+                    ),
+                  ],
                 ),
-                Expanded(child: conteudoSelecionado()),
+                const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFEEEEEE)),
+                Expanded(child: _buildConteudoPrincipal()),
               ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
