@@ -192,6 +192,21 @@ export class VagaController {
       const vagaRepository = AppDataSource.getRepository(Vaga);
       const empresaRepository = AppDataSource.getRepository(Empresa); 
 
+      // Admin pode listar todas as vagas para moderação.
+      if (perfilLogado === UsuarioPerfil.ADMIN) {
+        const vagas = await vagaRepository.find({
+          relations: [
+            "empresa",
+            "empresa.usuario",
+            "vagaHabilidades",
+            "vagaHabilidades.habilidade",
+          ],
+          order: { criado_em: "DESC" },
+        });
+
+        return res.status(200).json(vagas);
+      }
+
       // 1. Lógica para a EMPRESA (vê apenas as próprias vagas)
       if (perfilLogado === UsuarioPerfil.EMPRESA) {
         const empresa = await empresaRepository.findOne({

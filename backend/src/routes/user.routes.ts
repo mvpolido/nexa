@@ -2,15 +2,17 @@ import { Router } from "express";
 import { UserController } from "../controllers/UserController";
 import { PerfilController } from "../controllers/PerfilController"; // Importe o novo controller
 import { uploadConfig } from "../config/multer"; // Importe a configuração do multer
+import { authMiddleware } from "../middlewares/authMiddleware";
+import { adminMiddleware } from "../middlewares/adminMiddleware";
 
 const router = Router();
 
 // Rotas do CRUD
 router.post("/", UserController.create);
-router.get("/", UserController.getAll);
-router.get("/:id", UserController.getById);
-router.put("/:id", UserController.update);
-router.delete("/:id", UserController.delete);
+router.get("/", authMiddleware, adminMiddleware, UserController.getAll);
+router.get("/:id", authMiddleware, adminMiddleware, UserController.getById);
+router.put("/:id", authMiddleware, adminMiddleware, UserController.update);
+router.delete("/:id", authMiddleware, adminMiddleware, UserController.delete);
 
 // Nova rota para completar o perfil do Aluno (Upload de PDF + Skills)
 // O campo no formulário deve se chamar 'curriculo'
