@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { AlunoController } from "../controllers/AlunoController";
 import { authMiddleware } from "../middlewares/authMiddleware";
+import { uploadConfig } from "../config/multer";
 
 const router = Router();
 
@@ -16,5 +17,25 @@ router.put(
   authMiddleware,
   AlunoController.atualizarHabilidades
 );
+
+router.put(
+  "/me/curriculo",
+  authMiddleware,
+  (req, res, next) => {
+    uploadConfig.single("curriculo")(req, res, (error: any) => {
+      if (error) {
+        return res.status(400).json({
+          message: error.message || "Erro ao enviar currículo.",
+        });
+      }
+
+      return next();
+    });
+  },
+  AlunoController.atualizarCurriculo
+);
+
+router.get("/me/curriculo", authMiddleware, AlunoController.meuCurriculo);
+router.get("/:id/curriculo", authMiddleware, AlunoController.curriculoPorAluno);
 
 export default router;

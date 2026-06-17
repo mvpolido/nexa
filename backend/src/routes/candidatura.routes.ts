@@ -37,4 +37,10 @@ router.get(
   CandidaturaController.listarMensagens
 );
 
+router.get(
+  "/candidaturas/:id/curriculo",
+  authMiddleware,
+  CandidaturaController.curriculoDaCandidatura
+);
+
 export default router;

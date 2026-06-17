@@ -1,33 +1,40 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { Habilidade } from "../entities/Habilidade";
+import { Habilidade, HabilidadeArea } from "../entities/Habilidade";
 
 const HABILIDADES_INICIAIS = [
-  "Flutter",
-  "Dart",
-  "React",
-  "Next.js",
-  "TypeScript",
-  "JavaScript",
-  "Node.js",
-  "Express",
-  "Java",
-  "Spring Boot",
-  "Python",
-  "PostgreSQL",
-  "MySQL",
-  "Docker",
-  "Git",
-  "GitHub",
-  "APIs REST",
-  "HTML",
-  "CSS",
-  "Figma",
-  "UI/UX",
-  "Comunicação",
-  "Trabalho em equipe",
-  "Inglês básico",
-  "Inglês intermediário"
+  { nome: "Flutter", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Dart", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "React", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Next.js", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "TypeScript", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "JavaScript", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Node.js", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Express", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Java", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Spring Boot", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Python", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "PostgreSQL", area: HabilidadeArea.EXATAS },
+  { nome: "MySQL", area: HabilidadeArea.EXATAS },
+  { nome: "Docker", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Git", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "GitHub", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "APIs REST", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "HTML", area: HabilidadeArea.DESIGN },
+  { nome: "CSS", area: HabilidadeArea.DESIGN },
+  { nome: "Figma", area: HabilidadeArea.DESIGN },
+  { nome: "UI/UX", area: HabilidadeArea.DESIGN },
+  { nome: "Comunicação", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Trabalho em equipe", area: HabilidadeArea.GESTAO },
+  { nome: "Inglês básico", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Inglês intermediário", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Gestão de projetos", area: HabilidadeArea.GESTAO },
+  { nome: "CAD", area: HabilidadeArea.ENGENHARIA },
+  { nome: "Estatística", area: HabilidadeArea.EXATAS },
+  { nome: "Saúde digital", area: HabilidadeArea.SAUDE },
+  { nome: "Análise laboratorial", area: HabilidadeArea.QUIMICA },
+  { nome: "Modelagem física", area: HabilidadeArea.FISICA },
+  { nome: "Bioinformática", area: HabilidadeArea.BIOLOGIA }
 ];
 
 export class HabilidadeController {
@@ -50,7 +57,7 @@ export class HabilidadeController {
 
   static async create(req: Request, res: Response) {
     try {
-      const { nome } = req.body;
+      const { nome, area } = req.body;
 
       if (!nome || typeof nome !== "string" || !nome.trim()) {
         return res.status(400).json({
@@ -60,6 +67,13 @@ export class HabilidadeController {
 
       const repo = AppDataSource.getRepository(Habilidade);
       const nomeNormalizado = nome.trim();
+      const areaNormalizada = area ?? HabilidadeArea.TECNOLOGIA;
+
+      if (!Object.values(HabilidadeArea).includes(areaNormalizada)) {
+        return res.status(400).json({
+          message: "Área de habilidade inválida.",
+        });
+      }
 
       const existente = await repo.findOne({
         where: { nome: nomeNormalizado },
@@ -73,6 +87,7 @@ export class HabilidadeController {
 
       const nova = repo.create({
         nome: nomeNormalizado,
+        area: areaNormalizada,
       });
 
       const habilidadeSalva = await repo.save(nova);
@@ -93,17 +108,19 @@ export class HabilidadeController {
       const criadas: Habilidade[] = [];
       const existentes: Habilidade[] = [];
 
-      for (const nome of HABILIDADES_INICIAIS) {
+      for (const habilidadeSeed of HABILIDADES_INICIAIS) {
         const habilidadeExistente = await repo.findOne({
-          where: { nome },
+          where: { nome: habilidadeSeed.nome },
         });
 
         if (habilidadeExistente) {
+          habilidadeExistente.area = habilidadeSeed.area;
+          await repo.save(habilidadeExistente);
           existentes.push(habilidadeExistente);
           continue;
         }
 
-        const nova = repo.create({ nome });
+        const nova = repo.create(habilidadeSeed);
         const salva = await repo.save(nova);
         criadas.push(salva);
       }

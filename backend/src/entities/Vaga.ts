@@ -41,7 +41,21 @@ export class Vaga {
   })
   modalidade!: VagaModalidade;
 
-  // 🌍 Mantendo sua implementação de Geolocalização
+  @Column({ type: "varchar", length: 9, nullable: true })
+  cep?: string;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  endereco?: string;
+
+  @Column({ type: "varchar", length: 50, nullable: true })
+  numero?: string;
+
+  @Column({ type: "varchar", length: 120, nullable: true })
+  cidade?: string;
+
+  @Column({ type: "varchar", length: 2, nullable: true })
+  estado?: string;
+
   @Column({ type: "decimal", precision: 10, scale: 8, nullable: true })
   latitude?: number;
 

@@ -5,7 +5,9 @@ import { AppDataSource } from '../data-source';
 import { Empresa } from '../entities/Empresa';
 import { Usuario, UsuarioPerfil } from '../entities/Usuario';
 import { Avaliacao } from '../entities/Avaliacao';
-import { Candidatura } from '../entities/Candidatura';
+import { Candidatura, CandidaturaStatus } from '../entities/Candidatura';
+import { Vaga } from '../entities/Vaga';
+import { Aluno } from '../entities/Aluno';
 
 export class EmpresaController {
   async create(req: Request, res: Response) {
@@ -137,6 +139,134 @@ export class EmpresaController {
     } catch (error) {
       console.error('Erro ao atualizar perfil:', error);
       return res.status(500).json({ message: 'Erro ao atualizar perfil' });
+    }
+  }
+
+  async dashboard(req: Request, res: Response) {
+    try {
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        return res.status(403).json({ message: 'Apenas empresas podem acessar este recurso.' });
+      }
+
+      const empresaRepository = AppDataSource.getRepository(Empresa);
+      const vagaRepository = AppDataSource.getRepository(Vaga);
+      const candidaturaRepository = AppDataSource.getRepository(Candidatura);
+
+      const empresa = await empresaRepository.findOne({
+        where: { usuario: { id: usuarioLogadoId } },
+        relations: ['usuario']
+      });
+
+      if (!empresa) {
+        return res.status(404).json({ message: 'Perfil de empresa não encontrado.' });
+      }
+
+      const [vagasAtivas, vagasArquivadas, totalCandidatos, novasCandidaturas] =
+        await Promise.all([
+          vagaRepository.count({ where: { empresa_id: empresa.id, ativo: 1 } }),
+          vagaRepository.count({ where: { empresa_id: empresa.id, ativo: 0 } }),
+          candidaturaRepository
+            .createQueryBuilder('candidatura')
+            .innerJoin('candidatura.vaga', 'vaga')
+            .where('vaga.empresa_id = :empresaId', { empresaId: empresa.id })
+            .getCount(),
+          candidaturaRepository
+            .createQueryBuilder('candidatura')
+            .innerJoin('candidatura.vaga', 'vaga')
+            .where('vaga.empresa_id = :empresaId', { empresaId: empresa.id })
+            .andWhere('candidatura.status = :status', {
+              status: CandidaturaStatus.PENDENTE
+            })
+            .getCount()
+        ]);
+
+      return res.status(200).json({
+        vagasAtivas,
+        vagasArquivadas,
+        totalCandidatos,
+        novasCandidaturas
+      });
+    } catch (error) {
+      console.error('Erro ao buscar dashboard da empresa:', error);
+      return res.status(500).json({ message: 'Erro ao buscar dashboard da empresa' });
+    }
+  }
+
+  async perfilCandidato(req: Request, res: Response) {
+    try {
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+      const alunoId = Number(req.params.alunoId);
+
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        return res.status(403).json({ message: 'Apenas empresas podem acessar este recurso.' });
+      }
+
+      if (!alunoId || Number.isNaN(alunoId)) {
+        return res.status(400).json({ message: 'ID do aluno inválido.' });
+      }
+
+      const empresa = await AppDataSource.getRepository(Empresa).findOne({
+        where: { usuario: { id: usuarioLogadoId } },
+      });
+
+      if (!empresa) {
+        return res.status(404).json({ message: 'Perfil de empresa não encontrado.' });
+      }
+
+      const candidaturas = await AppDataSource.getRepository(Candidatura).find({
+        where: {
+          aluno_id: alunoId,
+          vaga: { empresa_id: empresa.id }
+        },
+        relations: ["vaga"],
+        order: { data_candidatura: "DESC" }
+      });
+
+      if (candidaturas.length === 0) {
+        return res.status(403).json({ message: 'Você só pode visualizar candidatos das suas vagas.' });
+      }
+
+      const aluno = await AppDataSource.getRepository(Aluno).findOne({
+        where: { id: alunoId },
+        relations: ["usuario", "alunoHabilidades", "alunoHabilidades.habilidade"]
+      });
+
+      if (!aluno) {
+        return res.status(404).json({ message: 'Perfil de aluno não encontrado.' });
+      }
+
+      return res.status(200).json({
+        id: aluno.id,
+        nome: aluno.usuario?.nome_exibicao,
+        email: aluno.usuario?.email,
+        cpf: aluno.cpf ? `***.${aluno.cpf.slice(3, 6)}.${aluno.cpf.slice(6, 9)}-**` : null,
+        curso: aluno.curso,
+        instituicao: aluno.instituicao,
+        ano_conclusao: aluno.ano_conclusao,
+        cep: aluno.cep,
+        endereco: aluno.endereco,
+        numero: aluno.numero,
+        url_curriculo: aluno.url_curriculo,
+        tem_curriculo: Boolean(aluno.url_curriculo),
+        habilidades: aluno.alunoHabilidades?.map((relacao) => relacao.habilidade).filter(Boolean) ?? [],
+        candidaturas: candidaturas.map((candidatura) => ({
+          id: candidatura.id,
+          vaga_id: candidatura.vaga_id,
+          vaga_titulo: candidatura.vaga?.titulo,
+          status: candidatura.status,
+          match_percent: candidatura.pontuacao_compatibilidade,
+          url_curriculo: candidatura.curriculo_path,
+          tem_curriculo_candidatura: Boolean(candidatura.curriculo_path),
+          created_at: candidatura.data_candidatura
+        }))
+      });
+    } catch (error) {
+      console.error('Erro ao buscar perfil do candidato:', error);
+      return res.status(500).json({ message: 'Erro ao buscar perfil do candidato' });
     }
   }
 

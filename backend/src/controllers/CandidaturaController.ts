@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import path from "path";
+import fs from "fs";
 import { AppDataSource } from "../data-source";
 import { Candidatura, CandidaturaStatus } from "../entities/Candidatura";
 import { Vaga } from "../entities/Vaga";
@@ -9,6 +11,30 @@ import { Mensagem } from "../entities/Mensagem";
 import { Notificacao } from "../entities/Notificacao";
 
 export class CandidaturaController {
+  private static enviarArquivoCurriculo(
+    res: Response,
+    filename?: string | null
+  ) {
+    if (!filename) {
+      return res.status(404).json({ message: "Currículo não anexado." });
+    }
+
+    const filePath = path.resolve(
+      __dirname,
+      "..",
+      "..",
+      "uploads",
+      "curriculos",
+      filename
+    );
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "Arquivo do currículo não encontrado." });
+    }
+
+    return res.sendFile(filePath);
+  }
+
   static async candidatar(req: Request, res: Response) {
     try {
       const usuarioLogadoId = (req as any).usuarioId;
@@ -65,7 +91,20 @@ export class CandidaturaController {
         });
       }
 
-      const curriculo_path = req.file ? req.file.filename : undefined;
+      const usarCurriculoPerfil =
+        req.body?.useCurriculoPerfil === "true" ||
+        req.body?.useCurriculoPerfil === true;
+      const curriculo_path = req.file
+        ? req.file.filename
+        : usarCurriculoPerfil
+          ? aluno.url_curriculo
+          : undefined;
+
+      if (usarCurriculoPerfil && !aluno.url_curriculo) {
+        return res.status(400).json({
+          message: "Você ainda não possui currículo salvo no perfil.",
+        });
+      }
 
       const novaCandidatura = candidaturaRepository.create({
         aluno,
@@ -327,6 +366,54 @@ export class CandidaturaController {
     } catch (error: any) {
       return res.status(500).json({
         message: "Erro ao listar histórico de mensagens do chat.",
+        error: error.message,
+      });
+    }
+  }
+
+  static async curriculoDaCandidatura(req: Request, res: Response) {
+    try {
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+      const candidaturaId = Number(req.params.id);
+
+      if (!candidaturaId || Number.isNaN(candidaturaId)) {
+        return res.status(400).json({ message: "ID da candidatura inválido." });
+      }
+
+      const candidatura = await AppDataSource.getRepository(Candidatura).findOne({
+        where: { id: candidaturaId },
+        relations: ["vaga"],
+      });
+
+      if (!candidatura) {
+        return res.status(404).json({ message: "Candidatura não encontrada." });
+      }
+
+      if (
+        perfilLogado === UsuarioPerfil.ALUNO &&
+        candidatura.aluno_id !== usuarioLogadoId
+      ) {
+        return res.status(403).json({ message: "Acesso negado ao currículo." });
+      }
+
+      if (perfilLogado === UsuarioPerfil.EMPRESA) {
+        const empresa = await AppDataSource.getRepository(Empresa).findOne({
+          where: { usuario: { id: usuarioLogadoId } },
+        });
+
+        if (!empresa || candidatura.vaga.empresa_id !== empresa.id) {
+          return res.status(403).json({ message: "Acesso negado ao currículo." });
+        }
+      }
+
+      return CandidaturaController.enviarArquivoCurriculo(
+        res,
+        candidatura.curriculo_path
+      );
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao buscar currículo da candidatura.",
         error: error.message,
       });
     }
