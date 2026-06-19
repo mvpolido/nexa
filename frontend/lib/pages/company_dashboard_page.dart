@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use, use_build_context_synchronously
 import 'dart:convert';
 import 'dart:html' as import_html;
 import 'package:flutter/material.dart';

@@ -1,8 +1,10 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as import_html;
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../widgets/skill_selector.dart';
@@ -18,6 +20,7 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   bool _isLoading = true;
   bool _isEditing = false;
   bool _isSaving = false;
+  bool _isUploadingCurriculo = false;
   String? _token;
 
   // Controladores de Texto
@@ -192,6 +195,80 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
     }
   }
 
+  Future<void> _alterarCurriculo() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final isPdf = file.extension?.toLowerCase() == 'pdf';
+
+      if (!isPdf || file.bytes == null) {
+        _mostrarErro('Envie um currículo em PDF.');
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        _mostrarErro('O currículo deve ter no máximo 5MB.');
+        return;
+      }
+
+      setState(() => _isUploadingCurriculo = true);
+
+      final request = http.MultipartRequest(
+        'PUT',
+        Uri.parse('${ApiConfig.baseUrl}/alunos/me/curriculo'),
+      );
+
+      request.headers['Authorization'] = 'Bearer $_token';
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'curriculo',
+          file.bytes!,
+          filename: file.name,
+          contentType: MediaType('application', 'pdf'),
+        ),
+      );
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _urlCurriculo = data['url_curriculo']?.toString();
+        });
+        await _carregarPerfil();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Currículo atualizado com sucesso.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        String mensagem = 'Erro ao atualizar currículo.';
+        if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          mensagem = data['message'] ?? mensagem;
+        }
+        _mostrarErro(mensagem);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _mostrarErro('Erro ao selecionar ou enviar currículo.');
+    } finally {
+      if (mounted) setState(() => _isUploadingCurriculo = false);
+    }
+  }
+
   Future<void> _salvarPerfil() async {
     setState(() => _isSaving = true);
 
@@ -218,6 +295,7 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
 
       if (response.statusCode == 200) {
         final habilidadesSalvas = await _salvarHabilidades();
+        if (!mounted) return;
 
         if (!habilidadesSalvas) {
           setState(() => _isSaving = false);
@@ -727,49 +805,104 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: const Color(0xFFE5E7EB)),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(
-                              Icons.description_outlined,
-                              color: Color(0xFF7C3AED),
-                              size: 32,
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Currículo Atual',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.description_outlined,
+                                  color: Color(0xFF7C3AED),
+                                  size: 32,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Currículo Atual',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        _urlCurriculo?.split('/').last ??
+                                            'Nenhum currículo enviado',
+                                        style: const TextStyle(
+                                          color: Color(0xFF6B7280),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  Text(
-                                    _urlCurriculo?.split('/').last ??
-                                        'Nenhum currículo enviado',
-                                    style: const TextStyle(
-                                      color: Color(0xFF6B7280),
-                                      fontSize: 12,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (_urlCurriculo != null &&
+                                    _urlCurriculo!.isNotEmpty) ...[
+                                  TextButton.icon(
+                                    onPressed: _isUploadingCurriculo
+                                        ? null
+                                        : () => _abrirCurriculo(),
+                                    icon: const Icon(
+                                      Icons.open_in_new,
+                                      size: 16,
                                     ),
+                                    label: const Text('Abrir'),
+                                  ),
+                                  IconButton(
+                                    onPressed: _isUploadingCurriculo
+                                        ? null
+                                        : () => _abrirCurriculo(download: true),
+                                    icon: const Icon(Icons.download),
+                                    tooltip: 'Baixar currículo',
                                   ),
                                 ],
-                              ),
+                                ElevatedButton.icon(
+                                  onPressed: _isUploadingCurriculo
+                                      ? null
+                                      : _alterarCurriculo,
+                                  icon: _isUploadingCurriculo
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(Icons.upload_file, size: 18),
+                                  label: Text(
+                                    _isUploadingCurriculo
+                                        ? 'Enviando...'
+                                        : (_urlCurriculo != null &&
+                                                  _urlCurriculo!.isNotEmpty
+                                              ? 'Alterar currículo'
+                                              : 'Enviar currículo'),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF7C3AED),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            if (_urlCurriculo != null &&
-                                _urlCurriculo!.isNotEmpty) ...[
-                              TextButton.icon(
-                                onPressed: () => _abrirCurriculo(),
-                                icon: const Icon(Icons.open_in_new, size: 16),
-                                label: const Text('Abrir'),
-                              ),
-                              IconButton(
-                                onPressed: () =>
-                                    _abrirCurriculo(download: true),
-                                icon: const Icon(Icons.download),
-                                tooltip: 'Baixar currículo',
-                              ),
-                            ],
                           ],
                         ),
                       ),

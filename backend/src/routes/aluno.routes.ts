@@ -24,8 +24,13 @@ router.put(
   (req, res, next) => {
     uploadConfig.single("curriculo")(req, res, (error: any) => {
       if (error) {
+        const message =
+          error.code === "LIMIT_FILE_SIZE"
+            ? "O currículo deve ter no máximo 5MB."
+            : error.message || "Erro ao enviar currículo.";
+
         return res.status(400).json({
-          message: error.message || "Erro ao enviar currículo.",
+          message,
         });
       }
 

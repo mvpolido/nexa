@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use, use_build_context_synchronously
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -5,7 +6,6 @@ import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../config/api_config.dart';
-import '../widgets/skill_selector.dart';
 import 'chat_page.dart';
 import 'chat_list_page.dart';
 import '../widgets/sininho_notificacao.dart';
@@ -19,14 +19,12 @@ class StudentJobsPage extends StatefulWidget {
 
 class _StudentJobsPageState extends State<StudentJobsPage> {
   bool isLoading = true;
-  bool isSavingSkills = false;
 
   String? token;
   String? nome;
   int? meuUsuarioId;
 
   List<dynamic> vagas = [];
-  List<dynamic> habilidadesDisponiveis = [];
 
   Set<int> minhasHabilidadesIds = {};
   Map<int, String> statusCandidaturasPorVaga = {};
@@ -63,7 +61,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     setState(() => isLoading = true);
 
     await Future.wait([
-      carregarHabilidades(),
       carregarMeuPerfil(),
       carregarVagas(),
       carregarMinhasCandidaturas(),
@@ -71,19 +68,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
     if (!mounted) return;
     setState(() => isLoading = false);
-  }
-
-  Future<void> carregarHabilidades() async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/habilidades'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data is List) habilidadesDisponiveis = data;
-      }
-    } catch (_) {}
   }
 
   Future<void> carregarMeuPerfil() async {
@@ -162,47 +146,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         }
       }
     } catch (_) {}
-  }
-
-  Future<void> salvarMinhasHabilidades(Set<int> habilidadeIds) async {
-    setState(() => isSavingSkills = true);
-    try {
-      final response = await http.put(
-        Uri.parse('${ApiConfig.baseUrl}/alunos/me/habilidades'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'habilidadeIds': habilidadeIds.toList()}),
-      );
-
-      if (!mounted) return;
-
-      if (response.statusCode == 200) {
-        setState(() => minhasHabilidadesIds = habilidadeIds);
-        await carregarVagas();
-        if (mounted) setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Habilidades atualizadas com sucesso.')),
-        );
-      } else {
-        String mensagem = 'Erro ao salvar habilidades.';
-        if (response.body.isNotEmpty) {
-          final data = jsonDecode(response.body);
-          mensagem = data['message'] ?? mensagem;
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(mensagem)));
-      }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erro de conexão com o servidor.')),
-      );
-    } finally {
-      if (mounted) setState(() => isSavingSkills = false);
-    }
   }
 
   Future<void> confirmarCandidatura(dynamic vaga) async {
@@ -730,34 +673,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
           ),
         );
       }).toList(),
-    );
-  }
-
-  Widget cardMinhasHabilidades() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: isSavingSkills
-          ? const Center(child: CircularProgressIndicator())
-          : SkillSelector(
-              title: 'Minhas Habilidades',
-              habilidades: habilidadesDisponiveis,
-              selectedIds: minhasHabilidadesIds,
-              onChanged: (updated) async =>
-                  await salvarMinhasHabilidades(updated),
-            ),
     );
   }
 
@@ -1294,8 +1209,6 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                             ),
                           ),
 
-                          const SizedBox(height: 12),
-                          cardMinhasHabilidades(),
                           const SizedBox(height: 24),
 
                           Padding(
