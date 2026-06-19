@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use, use_build_context_synchronously
 import 'dart:convert';
 import 'dart:html' as import_html;
 import 'package:flutter/material.dart';
@@ -27,6 +27,12 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   List<dynamic> vagas = [];
   List<dynamic> habilidadesDisponiveis = [];
+  Map<String, dynamic> resumoDashboard = {
+    'vagasAtivas': 0,
+    'vagasArquivadas': 0,
+    'totalCandidatos': 0,
+    'novasCandidaturas': 0,
+  };
 
   @override
   void initState() {
@@ -53,7 +59,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       return;
     }
 
-    await Future.wait([carregarHabilidades(), carregarVagas()]);
+    await Future.wait([
+      carregarHabilidades(),
+      carregarVagas(),
+      carregarResumoDashboard(),
+    ]);
   }
 
   bool vagaArquivada(dynamic vaga) {
@@ -127,6 +137,28 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     }
   }
 
+  Future<void> carregarResumoDashboard() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/empresas/me/dashboard'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic>) {
+          setState(() {
+            resumoDashboard = data;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> recarregarDashboard() async {
+    await Future.wait([carregarVagas(), carregarResumoDashboard()]);
+  }
+
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
@@ -153,6 +185,21 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     final requisitosController = TextEditingController(
       text: editando ? vaga['requisitos'] ?? '' : '',
     );
+    final cepController = TextEditingController(
+      text: editando ? vaga['cep'] ?? '' : '',
+    );
+    final enderecoController = TextEditingController(
+      text: editando ? vaga['endereco'] ?? '' : '',
+    );
+    final numeroController = TextEditingController(
+      text: editando ? vaga['numero'] ?? '' : '',
+    );
+    final cidadeController = TextEditingController(
+      text: editando ? vaga['cidade'] ?? '' : '',
+    );
+    final estadoController = TextEditingController(
+      text: editando ? vaga['estado'] ?? '' : '',
+    );
 
     String modalidade = editando ? vaga['modalidade'] ?? 'REMOTO' : 'REMOTO';
 
@@ -174,9 +221,47 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       context: context,
       builder: (dialogContext) {
         bool salvando = false;
+        bool buscandoCep = false;
+        String? cepErro;
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            Future<void> buscarCep(String value) async {
+              final cep = value.replaceAll(RegExp(r'[^0-9]'), '');
+              if (cep.length != 8) {
+                setDialogState(() => cepErro = 'CEP inválido.');
+                return;
+              }
+
+              setDialogState(() {
+                buscandoCep = true;
+                cepErro = null;
+              });
+
+              try {
+                final response = await http.get(
+                  Uri.parse('${ApiConfig.baseUrl}/enderecos/cep/$cep'),
+                  headers: {'Authorization': 'Bearer $token'},
+                );
+
+                if (response.statusCode == 200) {
+                  final data = jsonDecode(response.body);
+                  setDialogState(() {
+                    enderecoController.text = data['logradouro'] ?? '';
+                    cidadeController.text = data['cidade'] ?? '';
+                    estadoController.text = data['estado'] ?? '';
+                    cepErro = null;
+                  });
+                } else {
+                  setDialogState(() => cepErro = 'CEP não encontrado.');
+                }
+              } catch (_) {
+                setDialogState(() => cepErro = 'Erro ao consultar CEP.');
+              } finally {
+                setDialogState(() => buscandoCep = false);
+              }
+            }
+
             Future<void> salvar() async {
               if (!(formKey.currentState?.validate() ?? false)) return;
 
@@ -190,6 +275,13 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                   'descricao': descricaoController.text.trim(),
                   'requisitos': requisitosController.text.trim(),
                   'modalidade': modalidade,
+                  'cep': cepController.text.trim(),
+                  'endereco': enderecoController.text.trim(),
+                  'numero': numeroController.text.trim(),
+                  'cidade': cidadeController.text.trim(),
+                  'estado': estadoController.text.trim(),
+                  'latitude': vaga?['latitude'],
+                  'longitude': vaga?['longitude'],
                   'habilidadeIds': habilidadeIdsSelecionadas.toList(),
                 });
 
@@ -228,7 +320,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                     ),
                   );
 
-                  await carregarVagas();
+                  await recarregarDashboard();
                 } else {
                   String mensagem = 'Erro ao salvar vaga.';
 
@@ -344,6 +436,117 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                             });
                           },
                         ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: cepController,
+                          decoration:
+                              const InputDecoration(
+                                labelText: 'CEP',
+                                border: OutlineInputBorder(),
+                              ).copyWith(
+                                errorText: cepErro,
+                                suffixIcon: buscandoCep
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(12),
+                                        child: SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                          onChanged: (value) {
+                            final cep = value.replaceAll(RegExp(r'[^0-9]'), '');
+                            if (cep.length == 8) {
+                              buscarCep(value);
+                            } else if (cepErro != null) {
+                              setDialogState(() => cepErro = null);
+                            }
+                          },
+                          validator: (value) {
+                            if (modalidade == 'REMOTO') return null;
+                            final cep = (value ?? '').replaceAll(
+                              RegExp(r'[^0-9]'),
+                              '',
+                            );
+                            if (cep.length != 8) {
+                              return 'Informe um CEP válido.';
+                            }
+                            if (cepErro != null) return cepErro;
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: enderecoController,
+                          decoration: const InputDecoration(
+                            labelText: 'Endereço',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (modalidade == 'REMOTO') return null;
+
+                            if ((value ?? '').trim().isEmpty) {
+                              return 'Informe o endereço para vagas presenciais ou híbridas.';
+                            }
+
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: numeroController,
+                          decoration: const InputDecoration(
+                            labelText: 'Número',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                controller: cidadeController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Cidade',
+                                  border: OutlineInputBorder(),
+                                ),
+                                validator: (value) {
+                                  if (modalidade == 'REMOTO') return null;
+
+                                  if ((value ?? '').trim().isEmpty) {
+                                    return 'Informe a cidade.';
+                                  }
+
+                                  return null;
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: estadoController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Estado',
+                                  border: OutlineInputBorder(),
+                                ),
+                                validator: (value) {
+                                  if (modalidade == 'REMOTO') return null;
+
+                                  if ((value ?? '').trim().isEmpty) {
+                                    return 'Informe o estado.';
+                                  }
+
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 16),
                         SkillSelector(
                           title: 'Habilidades exigidas pela vaga',
@@ -387,6 +590,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     tituloController.dispose();
     descricaoController.dispose();
     requisitosController.dispose();
+    cepController.dispose();
+    enderecoController.dispose();
+    numeroController.dispose();
+    cidadeController.dispose();
+    estadoController.dispose();
   }
 
   Future<void> confirmarArquivamento(dynamic vaga) async {
@@ -461,7 +669,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           const SnackBar(content: Text('Vaga arquivada com sucesso.')),
         );
 
-        await carregarVagas();
+        await recarregarDashboard();
       } else {
         String mensagem = 'Erro ao arquivar vaga.';
 
@@ -497,7 +705,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           const SnackBar(content: Text('Vaga desarquivada com sucesso.')),
         );
 
-        await carregarVagas();
+        await recarregarDashboard();
       } else {
         String mensagem = 'Erro ao desarquivar vaga.';
 
@@ -654,6 +862,149 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     }
   }
 
+  Future<void> abrirPdfAutenticado(String endpoint) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}$endpoint'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode != 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível abrir o currículo.')),
+        );
+        return;
+      }
+
+      final blob = import_html.Blob([response.bodyBytes], 'application/pdf');
+      final url = import_html.Url.createObjectUrlFromBlob(blob);
+      import_html.window.open(url, '_blank');
+      Future.delayed(const Duration(seconds: 2), () {
+        import_html.Url.revokeObjectUrl(url);
+      });
+    } catch (_) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Erro ao abrir currículo.')));
+    }
+  }
+
+  Future<void> abrirPerfilCandidato(int alunoId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/empresas/candidatos/$alunoId/perfil'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao carregar perfil do candidato.'),
+          ),
+        );
+        return;
+      }
+
+      final perfil = jsonDecode(response.body);
+      final habilidades = perfil['habilidades'] is List
+          ? perfil['habilidades'] as List
+          : [];
+      final candidaturas = perfil['candidaturas'] is List
+          ? perfil['candidaturas'] as List
+          : [];
+
+      showDialog(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: Text(perfil['nome'] ?? 'Perfil do candidato'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620, maxHeight: 520),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Email: ${perfil['email'] ?? 'Não informado'}'),
+                    Text('Curso: ${perfil['curso'] ?? 'Não informado'}'),
+                    Text(
+                      'Instituição: ${perfil['instituicao'] ?? 'Não informada'}',
+                    ),
+                    Text(
+                      'Conclusão: ${perfil['ano_conclusao'] ?? 'Não informada'}',
+                    ),
+                    Text('Endereço: ${perfil['endereco'] ?? 'Não informado'}'),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Habilidades',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    habilidades.isEmpty
+                        ? const Text('Nenhuma habilidade cadastrada.')
+                        : chipsHabilidades(habilidades),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        if (perfil['tem_curriculo'] == true)
+                          TextButton.icon(
+                            onPressed: () => abrirPdfAutenticado(
+                              '/alunos/${perfil['id']}/curriculo',
+                            ),
+                            icon: const Icon(Icons.picture_as_pdf),
+                            label: const Text('Abrir currículo do perfil'),
+                          )
+                        else
+                          const Text('Currículo do perfil não anexado.'),
+                      ],
+                    ),
+                    const Divider(),
+                    const Text(
+                      'Candidaturas',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    ...candidaturas.map((candidatura) {
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(candidatura['vaga_titulo'] ?? 'Vaga'),
+                        subtitle: Text(
+                          'Status: ${candidatura['status'] ?? '-'}',
+                        ),
+                        trailing:
+                            candidatura['tem_curriculo_candidatura'] == true
+                            ? TextButton(
+                                onPressed: () => abrirPdfAutenticado(
+                                  '/candidaturas/${candidatura['id']}/curriculo',
+                                ),
+                                child: const Text('Currículo'),
+                              )
+                            : null,
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Fechar'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro de conexão com o servidor.')),
+      );
+    }
+  }
+
   void abrirDialogCandidatos(dynamic vaga, List<dynamic> candidaturas) {
     final List<dynamic> candidaturasDialog = List<dynamic>.from(candidaturas);
 
@@ -774,6 +1125,28 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                                         ),
                                       ),
                                       chipMatch(match),
+                                      if (aluno?['id'] is int)
+                                        TextButton.icon(
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            minimumSize: const Size(0, 32),
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
+                                          onPressed: () =>
+                                              abrirPerfilCandidato(aluno['id']),
+                                          icon: const Icon(
+                                            Icons.person_search,
+                                            size: 16,
+                                          ),
+                                          label: const Text(
+                                            'Perfil completo',
+                                            style: TextStyle(fontSize: 13),
+                                          ),
+                                        ),
                                       if (temCurriculo)
                                         TextButton.icon(
                                           style: TextButton.styleFrom(
@@ -786,24 +1159,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                                                 .shrinkWrap,
                                           ),
                                           onPressed: () {
-                                            if (curriculoPath.isNotEmpty) {
-                                              final String urlCompleta =
-                                                  '${ApiConfig.baseUrl}/files/curriculos/$curriculoPath';
-                                              import_html.window.open(
-                                                urlCompleta,
-                                                '_blank',
-                                              );
-                                            } else {
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Erro: Arquivo do currículo não encontrado para este candidato.',
-                                                  ),
-                                                ),
-                                              );
-                                            }
+                                            abrirPdfAutenticado(
+                                              '/candidaturas/$candidaturaId/curriculo',
+                                            );
                                           },
                                           icon: const Icon(
                                             Icons.picture_as_pdf,
@@ -904,6 +1262,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                                                 candidaturasDialog[index]['status'] =
                                                     novoStatus;
                                               });
+                                              await carregarResumoDashboard();
                                             },
                                     ),
                                   ),
@@ -955,7 +1314,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         .toSet();
   }
 
-  // 🛠️ MÉTODOS VISUAIS E RESPONSIVOS (ISSUE #97) 
+  // 🛠️ MÉTODOS VISUAIS E RESPONSIVOS (ISSUE #97)
 
   Widget chipsHabilidades(List<dynamic> habilidades) {
     if (habilidades.isEmpty) {
@@ -974,7 +1333,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           decoration: BoxDecoration(
             color: const Color(0xFF7C3AED).withAlpha(20), // 0.08
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFF7C3AED).withAlpha(51)), // 0.2
+            border: Border.all(
+              color: const Color(0xFF7C3AED).withAlpha(51),
+            ), // 0.2
           ),
           child: Text(
             habilidade['nome'] ?? 'Sem nome',
@@ -1028,27 +1389,38 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: arquivada ? Colors.grey.shade100 : Colors.green.shade50,
+                      color: arquivada
+                          ? Colors.grey.shade100
+                          : Colors.green.shade50,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       arquivada ? 'Arquivada' : 'Ativa',
                       style: TextStyle(
-                        color: arquivada ? Colors.grey.shade600 : Colors.green.shade700,
+                        color: arquivada
+                            ? Colors.grey.shade600
+                            : Colors.green.shade700,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
-              
+
               Row(
                 children: [
-                  Icon(Icons.work_outline, size: 16, color: Colors.grey.shade500),
+                  Icon(
+                    Icons.work_outline,
+                    size: 16,
+                    color: Colors.grey.shade500,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     vaga['modalidade'] ?? '-',
@@ -1057,17 +1429,21 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                 ],
               ),
               const SizedBox(height: 16),
-              
+
               Text(
                 vaga['descricao'] ?? 'Sem descrição.',
-                style: TextStyle(color: Colors.grey.shade600, height: 1.4, fontSize: 14),
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  height: 1.4,
+                  fontSize: 14,
+                ),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
-              
+
               const SizedBox(height: 16),
               chipsHabilidades(habilidadesDaVaga(vaga)),
-              
+
               const SizedBox(height: 20),
               const Divider(color: Color(0xFFF3F4F6)),
               const SizedBox(height: 12),
@@ -1086,17 +1462,27 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                     icon: const Icon(Icons.people_alt_outlined, size: 18),
-                    label: const Text('Ver Candidatos', style: TextStyle(fontWeight: FontWeight.w600)),
+                    label: const Text(
+                      'Ver Candidatos',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
                   OutlinedButton.icon(
-                    onPressed: arquivada ? null : () => abrirFormularioVaga(vaga: vaga),
+                    onPressed: arquivada
+                        ? null
+                        : () => abrirFormularioVaga(vaga: vaga),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.grey.shade700,
                       side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     icon: const Icon(Icons.edit_outlined, size: 18),
                     label: const Text('Editar'),
@@ -1106,11 +1492,24 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                         ? () => confirmarDesarquivamento(vaga)
                         : () => confirmarArquivamento(vaga),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: arquivada ? Colors.green.shade600 : Colors.red.shade400,
-                      side: BorderSide(color: arquivada ? Colors.green.shade200 : Colors.red.shade200),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      foregroundColor: arquivada
+                          ? Colors.green.shade600
+                          : Colors.red.shade400,
+                      side: BorderSide(
+                        color: arquivada
+                            ? Colors.green.shade200
+                            : Colors.red.shade200,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
-                    icon: Icon(arquivada ? Icons.unarchive_outlined : Icons.archive_outlined, size: 18),
+                    icon: Icon(
+                      arquivada
+                          ? Icons.unarchive_outlined
+                          : Icons.archive_outlined,
+                      size: 18,
+                    ),
                     label: Text(arquivada ? 'Desarquivar' : 'Arquivar'),
                   ),
                 ],
@@ -1154,10 +1553,8 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ChatListPage(
-                    token: token!,
-                    isAluno: false,
-                  ),
+                  builder: (context) =>
+                      ChatListPage(token: token!, isAluno: false),
                 ),
               );
             },
@@ -1167,11 +1564,18 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     );
   }
 
-  Widget _buildCardMetrica(String titulo, String valor, IconData icone, Color corBase) {
+  Widget _buildCardMetrica(
+    String titulo,
+    String valor,
+    IconData icone,
+    Color corBase,
+  ) {
     return Expanded(
       flex: 1,
       child: Container(
-        constraints: const BoxConstraints(minWidth: 140), // 👈 ERRO PRINCIPAL CORRIGIDO
+        constraints: const BoxConstraints(
+          minWidth: 140,
+        ), // 👈 ERRO PRINCIPAL CORRIGIDO
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1199,12 +1603,20 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
             const SizedBox(height: 16),
             Text(
               valor,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1F2937),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               titulo,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -1214,21 +1626,29 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   Widget _buildConteudoPrincipal() {
     if (isLoading) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFF7C3AED)));
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+      );
     }
 
-    final listaExibicao = selectedMenuIndex == 0 ? vagasAtivas : vagasArquivadas;
+    final listaExibicao = selectedMenuIndex == 0
+        ? vagasAtivas
+        : vagasArquivadas;
 
     return RefreshIndicator(
       color: const Color(0xFF7C3AED),
-      onRefresh: carregarVagas,
+      onRefresh: recarregarDashboard,
       child: ListView(
         padding: const EdgeInsets.all(24),
         children: [
           // CABEÇALHO DO DASHBOARD
           const Text(
             'Dashboard',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF111827)),
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF111827),
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1245,16 +1665,36 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
               children: [
                 Row(
                   children: [
-                    _buildCardMetrica('Vagas Ativas', vagasAtivas.length.toString(), Icons.work_outline, const Color(0xFF7C3AED)),
+                    _buildCardMetrica(
+                      'Vagas Ativas',
+                      '${resumoDashboard['vagasAtivas'] ?? vagasAtivas.length}',
+                      Icons.work_outline,
+                      const Color(0xFF7C3AED),
+                    ),
                     const SizedBox(width: 16),
-                    _buildCardMetrica('Vagas Arquivadas', vagasArquivadas.length.toString(), Icons.archive_outlined, Colors.orange),
+                    _buildCardMetrica(
+                      'Vagas Arquivadas',
+                      '${resumoDashboard['vagasArquivadas'] ?? vagasArquivadas.length}',
+                      Icons.archive_outlined,
+                      Colors.orange,
+                    ),
                   ],
                 ),
                 Row(
                   children: [
-                    _buildCardMetrica('Total de Candidatos', '-', Icons.people_outline, Colors.blue),
+                    _buildCardMetrica(
+                      'Total de Candidatos',
+                      '${resumoDashboard['totalCandidatos'] ?? 0}',
+                      Icons.people_outline,
+                      Colors.blue,
+                    ),
                     const SizedBox(width: 16),
-                    _buildCardMetrica('Novas Candidaturas', '-', Icons.fiber_new_outlined, Colors.green),
+                    _buildCardMetrica(
+                      'Novas Candidaturas',
+                      '${resumoDashboard['novasCandidaturas'] ?? 0}',
+                      Icons.fiber_new_outlined,
+                      Colors.green,
+                    ),
                   ],
                 ),
               ],
@@ -1265,7 +1705,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           // LISTA DE VAGAS
           Text(
             selectedMenuIndex == 0 ? 'Vagas Ativas' : 'Vagas Arquivadas',
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1F2937),
+            ),
           ),
           const SizedBox(height: 16),
 
@@ -1274,8 +1718,8 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Text(
-                  selectedMenuIndex == 0 
-                      ? 'Não possui vagas ativas no momento.' 
+                  selectedMenuIndex == 0
+                      ? 'Não possui vagas ativas no momento.'
                       : 'Não possui vagas arquivadas no momento.',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                 ),
@@ -1283,8 +1727,10 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
             )
           else
             ...listaExibicao.map((vaga) => cardVaga(vaga)),
-            
-          const SizedBox(height: 60), // Espaço pro botão flutuante não tapar o ultimo card
+
+          const SizedBox(
+            height: 60,
+          ), // Espaço pro botão flutuante não tapar o ultimo card
         ],
       ),
     );
@@ -1301,7 +1747,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       appBar: AppBar(
         title: const Text(
           'Nexa',
-          style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w900, color: Color(0xFF7C3AED)),
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF7C3AED),
+          ),
         ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
@@ -1317,12 +1767,8 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
             child: buildChatBadge(),
           ),
           IconButton(
-            onPressed: carregarVagas,
+            onPressed: recarregarDashboard,
             icon: const Icon(Icons.refresh, color: Colors.black87),
-          ),
-          IconButton(
-            onPressed: logout,
-            icon: const Icon(Icons.logout, color: Colors.black87),
           ),
           GestureDetector(
             onTap: () => Navigator.pushNamed(context, '/company-profile'),
@@ -1342,7 +1788,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
           ),
         ],
       ),
-      
+
       // 🛠️ MENU INFERIOR APENAS PARA MOBILE
       bottomNavigationBar: isMobile
           ? BottomNavigationBar(
@@ -1353,12 +1799,20 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
               backgroundColor: Colors.white,
               elevation: 8,
               items: const [
-                BottomNavigationBarItem(icon: Icon(Icons.work_outline), activeIcon: Icon(Icons.work), label: 'Vagas Ativas'),
-                BottomNavigationBarItem(icon: Icon(Icons.archive_outlined), activeIcon: Icon(Icons.archive), label: 'Arquivadas'),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.work_outline),
+                  activeIcon: Icon(Icons.work),
+                  label: 'Vagas Ativas',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.archive_outlined),
+                  activeIcon: Icon(Icons.archive),
+                  label: 'Arquivadas',
+                ),
               ],
             )
           : null,
-          
+
       floatingActionButton: mostrandoArquivadas
           ? null
           : FloatingActionButton.extended(
@@ -1366,9 +1820,15 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
               backgroundColor: const Color(0xFF7C3AED),
               elevation: 4,
               icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('Nova vaga', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Nova vaga',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-            
+
       body: isMobile
           // Se for Mobile, ocupa a tela toda com o conteúdo
           ? _buildConteudoPrincipal()
@@ -1377,10 +1837,16 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
               children: [
                 NavigationRail(
                   selectedIndex: selectedMenuIndex,
-                  onDestinationSelected: (index) => setState(() => selectedMenuIndex = index),
+                  onDestinationSelected: (index) =>
+                      setState(() => selectedMenuIndex = index),
                   labelType: NavigationRailLabelType.all,
-                  selectedIconTheme: const IconThemeData(color: Color(0xFF7C3AED)),
-                  selectedLabelTextStyle: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.bold),
+                  selectedIconTheme: const IconThemeData(
+                    color: Color(0xFF7C3AED),
+                  ),
+                  selectedLabelTextStyle: const TextStyle(
+                    color: Color(0xFF7C3AED),
+                    fontWeight: FontWeight.bold,
+                  ),
                   destinations: [
                     NavigationRailDestination(
                       icon: const Icon(Icons.work_outline),
@@ -1394,7 +1860,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                     ),
                   ],
                 ),
-                const VerticalDivider(width: 1, thickness: 1, color: Color(0xFFEEEEEE)),
+                const VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Color(0xFFEEEEEE),
+                ),
                 Expanded(child: _buildConteudoPrincipal()),
               ],
             ),

@@ -11,6 +11,98 @@ import { Notificacao } from "../entities/Notificacao";
 import { calcularMatchPercent } from "../services/matchService";
 
 export class VagaController {
+  private static textoPreenchido(value: unknown) {
+    return typeof value === "string" && value.trim().length > 0;
+  }
+
+  private static normalizarTextoOpcional(value: unknown) {
+    return typeof value === "string" && value.trim().length > 0
+      ? value.trim()
+      : undefined;
+  }
+
+  private static normalizarCoordenadaOpcional(value: unknown) {
+    if (value === undefined) return undefined;
+    if (value === null || value === "") return undefined;
+
+    const numero = Number(value);
+    return Number.isFinite(numero) ? numero : NaN;
+  }
+
+  private static coordenadasValidas(latitude: unknown, longitude: unknown) {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    return (
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180
+    );
+  }
+
+  private static enderecoMinimoPreenchido(dados: {
+    cep?: unknown;
+    endereco?: unknown;
+    cidade?: unknown;
+    estado?: unknown;
+  }) {
+    const cep = typeof dados.cep === "string" ? dados.cep.replace(/\D/g, "") : "";
+
+    return (
+      cep.length === 8 &&
+      VagaController.textoPreenchido(dados.endereco) &&
+      VagaController.textoPreenchido(dados.cidade) &&
+      VagaController.textoPreenchido(dados.estado)
+    );
+  }
+
+  private static calcularDistanciaKm(
+    origemLat?: unknown,
+    origemLng?: unknown,
+    destinoLat?: unknown,
+    destinoLng?: unknown
+  ) {
+    if (!VagaController.coordenadasValidas(origemLat, origemLng)) return null;
+    if (!VagaController.coordenadasValidas(destinoLat, destinoLng)) return null;
+
+    const lat1 = Number(origemLat);
+    const lng1 = Number(origemLng);
+    const lat2 = Number(destinoLat);
+    const lng2 = Number(destinoLng);
+    const toRad = (value: number) => (value * Math.PI) / 180;
+    const raioTerraKm = 6371;
+
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) *
+        Math.cos(toRad(lat2)) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+
+    return raioTerraKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  }
+
+  private static validarLocalizacaoVaga(dados: {
+    modalidade: VagaModalidade;
+    cep?: unknown;
+    endereco?: unknown;
+    cidade?: unknown;
+    estado?: unknown;
+    latitude?: unknown;
+    longitude?: unknown;
+  }) {
+    if (dados.modalidade === VagaModalidade.REMOTO) return null;
+
+    if (VagaController.enderecoMinimoPreenchido(dados)) return null;
+
+    return "Informe CEP válido, endereço, cidade e estado para vagas presenciais ou híbridas.";
+  }
+
   private static async sincronizarHabilidadesDaVaga(
     vagaId: number,
     habilidadeIds: number[]
@@ -71,6 +163,11 @@ export class VagaController {
         descricao,
         requisitos,
         modalidade,
+        cep,
+        endereco,
+        numero,
+        cidade,
+        estado,
         latitude,
         longitude,
         habilidadeIds,
@@ -95,6 +192,34 @@ export class VagaController {
         return res.status(400).json({
           message: "Modalidade inválida.",
         });
+      }
+
+      const latitudeNormalizada =
+        VagaController.normalizarCoordenadaOpcional(latitude);
+      const longitudeNormalizada =
+        VagaController.normalizarCoordenadaOpcional(longitude);
+
+      if (
+        Number.isNaN(latitudeNormalizada) ||
+        Number.isNaN(longitudeNormalizada)
+      ) {
+        return res.status(400).json({
+          message: "Latitude e longitude devem ser coordenadas válidas.",
+        });
+      }
+
+      const erroLocalizacao = VagaController.validarLocalizacaoVaga({
+        modalidade,
+        cep,
+        endereco,
+        cidade,
+        estado,
+        latitude: latitudeNormalizada,
+        longitude: longitudeNormalizada,
+      });
+
+      if (erroLocalizacao) {
+        return res.status(400).json({ message: erroLocalizacao });
       }
 
       if (habilidadeIds !== undefined && !Array.isArray(habilidadeIds)) {
@@ -124,8 +249,13 @@ export class VagaController {
         descricao,
         requisitos: requisitos || null,
         modalidade,
-        latitude: latitude ?? empresa.latitude ?? null,
-        longitude: longitude ?? empresa.longitude ?? null,
+        cep: VagaController.normalizarTextoOpcional(cep),
+        endereco: VagaController.normalizarTextoOpcional(endereco),
+        numero: VagaController.normalizarTextoOpcional(numero),
+        cidade: VagaController.normalizarTextoOpcional(cidade),
+        estado: VagaController.normalizarTextoOpcional(estado),
+        latitude: latitudeNormalizada,
+        longitude: longitudeNormalizada,
         habilidades: [],
         ativo: 1,
       });
@@ -191,6 +321,29 @@ export class VagaController {
 
       const vagaRepository = AppDataSource.getRepository(Vaga);
       const empresaRepository = AppDataSource.getRepository(Empresa); 
+      const modalidadeQuery = req.query.modalidade?.toString();
+      const distanciaKmQuery = req.query.distanciaKm?.toString();
+
+      if (
+        modalidadeQuery &&
+        !Object.values(VagaModalidade).includes(modalidadeQuery as VagaModalidade)
+      ) {
+        return res.status(400).json({
+          message: "Modalidade inválida.",
+        });
+      }
+
+      const distanciaKm =
+        distanciaKmQuery !== undefined ? Number(distanciaKmQuery) : null;
+
+      if (
+        distanciaKmQuery !== undefined &&
+        (distanciaKm === null || !Number.isFinite(distanciaKm) || distanciaKm < 0)
+      ) {
+        return res.status(400).json({
+          message: "Distância inválida.",
+        });
+      }
 
       // Admin pode listar todas as vagas para moderação.
       if (perfilLogado === UsuarioPerfil.ADMIN) {
@@ -244,7 +397,12 @@ export class VagaController {
       }
 
       const vagas = await vagaRepository.find({
-        where: { ativo: 1 },
+        where: {
+          ativo: 1,
+          ...(modalidadeQuery
+            ? { modalidade: modalidadeQuery as VagaModalidade }
+            : {}),
+        },
         relations: [
           "empresa",
           "empresa.usuario",
@@ -266,6 +424,13 @@ export class VagaController {
             habilidadesVaga.includes(h)
           );
 
+          const distancia_km = VagaController.calcularDistanciaKm(
+            aluno.latitude,
+            aluno.longitude,
+            vaga.latitude,
+            vaga.longitude
+          );
+
           const match_percent = calcularMatchPercent(
             habilidadesAluno,
             habilidadesVaga,
@@ -277,10 +442,18 @@ export class VagaController {
 
           return {
             ...vaga,
+            distancia_km,
             match_percent,
             skills_required: habilidadesVaga.length,
             skills_matched: habilidadesEmComum.length,
           };
+        })
+        .filter((vaga) => {
+          if (distanciaKm === null) return true;
+          if (vaga.modalidade === VagaModalidade.REMOTO) return true;
+          if (vaga.distancia_km === null) return false;
+          const limiteDistanciaKm = distanciaKm;
+          return vaga.distancia_km <= limiteDistanciaKm;
         })
         .sort((a, b) => {
           if (b.match_percent !== a.match_percent) {
@@ -386,6 +559,11 @@ export class VagaController {
         descricao,
         requisitos,
         modalidade,
+        cep,
+        endereco,
+        numero,
+        cidade,
+        estado,
         latitude,
         longitude,
         habilidadeIds,
@@ -403,12 +581,68 @@ export class VagaController {
         });
       }
 
+      const latitudeNormalizada =
+        VagaController.normalizarCoordenadaOpcional(latitude);
+      const longitudeNormalizada =
+        VagaController.normalizarCoordenadaOpcional(longitude);
+
+      if (
+        Number.isNaN(latitudeNormalizada) ||
+        Number.isNaN(longitudeNormalizada)
+      ) {
+        return res.status(400).json({
+          message: "Latitude e longitude devem ser coordenadas válidas.",
+        });
+      }
+
+      const modalidadeFinal = modalidade ?? vaga.modalidade;
+      const cepFinal =
+        cep === undefined ? vaga.cep : VagaController.normalizarTextoOpcional(cep);
+      const enderecoFinal =
+        endereco === undefined
+          ? vaga.endereco
+          : VagaController.normalizarTextoOpcional(endereco);
+      const cidadeFinal =
+        cidade === undefined
+          ? vaga.cidade
+          : VagaController.normalizarTextoOpcional(cidade);
+      const estadoFinal =
+        estado === undefined
+          ? vaga.estado
+          : VagaController.normalizarTextoOpcional(estado);
+      const latitudeFinal =
+        latitudeNormalizada === undefined ? vaga.latitude : latitudeNormalizada;
+      const longitudeFinal =
+        longitudeNormalizada === undefined ? vaga.longitude : longitudeNormalizada;
+
+      const erroLocalizacao = VagaController.validarLocalizacaoVaga({
+        modalidade: modalidadeFinal,
+        cep: cepFinal,
+        endereco: enderecoFinal,
+        cidade: cidadeFinal,
+        estado: estadoFinal,
+        latitude: latitudeFinal,
+        longitude: longitudeFinal,
+      });
+
+      if (erroLocalizacao) {
+        return res.status(400).json({ message: erroLocalizacao });
+      }
+
       vaga.titulo = titulo ?? vaga.titulo;
       vaga.descricao = descricao ?? vaga.descricao;
       vaga.requisitos = requisitos ?? vaga.requisitos;
-      vaga.modalidade = modalidade ?? vaga.modalidade;
-      vaga.latitude = latitude ?? vaga.latitude;
-      vaga.longitude = longitude ?? vaga.longitude;
+      vaga.modalidade = modalidadeFinal;
+      vaga.cep = cepFinal ?? undefined;
+      vaga.endereco = enderecoFinal ?? undefined;
+      vaga.numero =
+        numero === undefined
+          ? vaga.numero
+          : VagaController.normalizarTextoOpcional(numero) ?? undefined;
+      vaga.cidade = cidadeFinal ?? undefined;
+      vaga.estado = estadoFinal ?? undefined;
+      vaga.latitude = latitudeFinal ?? undefined;
+      vaga.longitude = longitudeFinal ?? undefined;
 
       const vagaAtualizada = await vagaRepository.save(vaga);
 

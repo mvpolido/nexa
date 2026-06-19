@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'student_signup_step3_screen.dart';
