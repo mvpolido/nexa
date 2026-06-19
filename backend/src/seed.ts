@@ -4,7 +4,7 @@ import { AppDataSource } from "./data-source";
 import { Usuario, UsuarioPerfil } from "./entities/Usuario";
 import { Aluno } from "./entities/Aluno";
 import { Empresa } from "./entities/Empresa";
-import { Habilidade } from "./entities/Habilidade";
+import { Habilidade, HabilidadeArea } from "./entities/Habilidade";
 import { Vaga, VagaModalidade } from "./entities/Vaga";
 import { Candidatura, CandidaturaStatus } from "./entities/Candidatura";
 import { AlunoHabilidade } from "./entities/AlunoHabilidade";
@@ -13,16 +13,22 @@ import { VagaHabilidade } from "./entities/VagaHabilidade";
 const TEST_PASSWORD = "123456";
 
 const habilidadesIniciais = [
-  "Flutter",
-  "Dart",
-  "React",
-  "Node.js",
-  "TypeScript",
-  "Git",
-  "Docker",
-  "PostgreSQL",
-  "APIs REST",
-  "Comunicação",
+  { nome: "Flutter", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Dart", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "React", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Node.js", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "TypeScript", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Git", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Docker", area: HabilidadeArea.ENGENHARIA },
+  { nome: "PostgreSQL", area: HabilidadeArea.EXATAS },
+  { nome: "APIs REST", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Comunicação", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Gestão de projetos", area: HabilidadeArea.GESTAO },
+  { nome: "Figma", area: HabilidadeArea.DESIGN },
+  { nome: "Bioinformática", area: HabilidadeArea.BIOLOGIA },
+  { nome: "Análise laboratorial", area: HabilidadeArea.QUIMICA },
+  { nome: "Modelagem física", area: HabilidadeArea.FISICA },
+  { nome: "Saúde digital", area: HabilidadeArea.SAUDE },
 ];
 
 async function runSeed() {
@@ -100,15 +106,20 @@ async function runSeed() {
       return empresaRepository.save(empresa);
     };
 
-    const getOrCreateHabilidade = async (nome: string) => {
+    const getOrCreateHabilidade = async (dados: {
+      nome: string;
+      area: HabilidadeArea;
+    }) => {
+      const { nome, area } = dados;
       let habilidade = await habilidadeRepository.findOne({ where: { nome } });
 
       if (!habilidade) {
-        habilidade = habilidadeRepository.create({ nome });
-        habilidade = await habilidadeRepository.save(habilidade);
+        habilidade = habilidadeRepository.create({ nome, area });
       }
 
-      return habilidade;
+      habilidade.area = area;
+
+      return habilidadeRepository.save(habilidade);
     };
 
     const getOrCreateAlunoHabilidade = async (
@@ -133,6 +144,11 @@ async function runSeed() {
       descricao: string;
       requisitos: string;
       modalidade: VagaModalidade;
+      cep?: string;
+      endereco?: string;
+      numero?: string;
+      cidade?: string;
+      estado?: string;
       latitude?: number;
       longitude?: number;
       habilidades: string[];
@@ -151,6 +167,11 @@ async function runSeed() {
       vaga.descricao = dados.descricao;
       vaga.requisitos = dados.requisitos;
       vaga.modalidade = dados.modalidade;
+      vaga.cep = dados.cep;
+      vaga.endereco = dados.endereco;
+      vaga.numero = dados.numero;
+      vaga.cidade = dados.cidade;
+      vaga.estado = dados.estado;
       vaga.latitude = dados.latitude;
       vaga.longitude = dados.longitude;
       vaga.habilidades = dados.habilidades;
@@ -207,9 +228,9 @@ async function runSeed() {
 
     console.log("Criando ou reutilizando habilidades...");
     const habilidades = new Map<string, Habilidade>();
-    for (const nome of habilidadesIniciais) {
-      const habilidade = await getOrCreateHabilidade(nome);
-      habilidades.set(nome, habilidade);
+    for (const habilidadeSeed of habilidadesIniciais) {
+      const habilidade = await getOrCreateHabilidade(habilidadeSeed);
+      habilidades.set(habilidadeSeed.nome, habilidade);
     }
 
     console.log("Criando ou reutilizando vínculos aluno-habilidade...");
@@ -231,6 +252,11 @@ async function runSeed() {
         descricao: "Vaga de estágio para apoiar o desenvolvimento de APIs e integrações.",
         requisitos: "Conhecimento em Node.js, TypeScript, Docker e PostgreSQL.",
         modalidade: VagaModalidade.HIBRIDO,
+        cep: "01001000",
+        endereco: "Praça da Sé",
+        numero: "100",
+        cidade: "São Paulo",
+        estado: "SP",
         latitude: -23.5505,
         longitude: -46.6333,
         habilidades: ["Node.js", "TypeScript", "Docker", "PostgreSQL", "APIs REST"],

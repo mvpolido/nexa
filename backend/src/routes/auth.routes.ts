@@ -1,11 +1,15 @@
 import jwt from "jsonwebtoken";
 import { Router } from "express";
 import bcrypt from "bcrypt";
+import { In } from "typeorm";
 import { cpf as cpfValidator, cnpj as cnpjValidator } from "cpf-cnpj-validator";
 import { AppDataSource } from "../data-source";
 import { Usuario, UsuarioPerfil } from "../entities/Usuario";
 import { Aluno } from "../entities/Aluno";
+import { AlunoHabilidade } from "../entities/AlunoHabilidade";
 import { Empresa } from "../entities/Empresa";
+import { Habilidade } from "../entities/Habilidade";
+import { uploadConfig } from "../config/multer";
 
 const router = Router();
 
@@ -13,7 +17,127 @@ function onlyNumbers(value: string | undefined): string {
   return (value || "").replace(/\D/g, "");
 }
 
-router.post("/register", async (req, res) => {
+function parseArrayField(value: any): any[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+}
+
+const CURSOS_PERMITIDOS = [
+  "Administração",
+  "Agronomia",
+  "Análise e Desenvolvimento de Sistemas",
+  "Arquitetura e Urbanismo",
+  "Biomedicina",
+  "Ciência da Computação",
+  "Ciências Biológicas",
+  "Ciências Contábeis",
+  "Comunicação Social",
+  "Design",
+  "Design Gráfico",
+  "Direito",
+  "Economia",
+  "Educação Física",
+  "Enfermagem",
+  "Engenharia Ambiental",
+  "Engenharia Civil",
+  "Engenharia da Computação",
+  "Engenharia de Alimentos",
+  "Engenharia de Controle e Automação",
+  "Engenharia de Produção",
+  "Engenharia de Software",
+  "Engenharia Elétrica",
+  "Engenharia Eletrônica",
+  "Engenharia Mecânica",
+  "Engenharia Química",
+  "Farmácia",
+  "Física",
+  "Fisioterapia",
+  "Gestão da Tecnologia da Informação",
+  "Jornalismo",
+  "Letras",
+  "Logística",
+  "Marketing",
+  "Matemática",
+  "Medicina Veterinária",
+  "Nutrição",
+  "Pedagogia",
+  "Psicologia",
+  "Publicidade e Propaganda",
+  "Química",
+  "Recursos Humanos",
+  "Relações Internacionais",
+  "Sistemas de Informação",
+  "Técnico em Administração",
+  "Técnico em Desenvolvimento de Sistemas",
+  "Técnico em Edificações",
+  "Técnico em Eletrotécnica",
+  "Técnico em Informática",
+  "Técnico em Mecânica",
+  "Técnico em Química",
+];
+
+const INSTITUICOES_PERMITIDAS = [
+  "UTFPR - Universidade Tecnológica Federal do Paraná",
+  "IFPR - Instituto Federal do Paraná",
+  "UFPR - Universidade Federal do Paraná",
+  "UEM - Universidade Estadual de Maringá",
+  "UEL - Universidade Estadual de Londrina",
+  "UEPG - Universidade Estadual de Ponta Grossa",
+  "UNESPAR - Universidade Estadual do Paraná",
+  "UNICENTRO - Universidade Estadual do Centro-Oeste",
+  "PUCPR - Pontifícia Universidade Católica do Paraná",
+  "UniCesumar",
+  "Uningá",
+  "Unicesumar",
+  "Unipar",
+  "Universidade Positivo",
+  "Universidade Tuiuti do Paraná",
+  "FAG",
+  "Univel",
+  "Unioeste - Universidade Estadual do Oeste do Paraná",
+  "Campo Real",
+  "FAE Centro Universitário",
+  "Estácio",
+  "Anhanguera",
+  "Unopar",
+  "UniBrasil",
+  "UniDomBosco",
+  "SENAI",
+  "SENAC",
+  "Fatec",
+  "ETEC",
+  "IFSP - Instituto Federal de São Paulo",
+  "USP - Universidade de São Paulo",
+  "UNESP - Universidade Estadual Paulista",
+  "UNICAMP - Universidade Estadual de Campinas",
+  "UFSCar - Universidade Federal de São Carlos",
+  "UFMG - Universidade Federal de Minas Gerais",
+  "UFSC - Universidade Federal de Santa Catarina",
+  "UFRGS - Universidade Federal do Rio Grande do Sul",
+  "UFSM - Universidade Federal de Santa Maria",
+];
+
+router.post("/register", (req, res, next) => {
+  uploadConfig.single("curriculo")(req, res, (error: any) => {
+    if (error) {
+      return res.status(400).json({
+        message: error.message || "Erro ao enviar currículo.",
+      });
+    }
+
+    return next();
+  });
+}, async (req, res) => {
   try {
     const {
       nome_exibicao,
@@ -30,7 +154,9 @@ router.post("/register", async (req, res) => {
       cep,
       endereco,
       numero,
-      url_curriculo
+      habilidades,
+      habilidadeIds,
+      skills,
     } = req.body;
 
     const senha = req.body.senha ?? req.body.password;
@@ -50,6 +176,9 @@ router.post("/register", async (req, res) => {
     const usuarioRepository = AppDataSource.getRepository(Usuario);
     const alunoRepository = AppDataSource.getRepository(Aluno);
     const empresaRepository = AppDataSource.getRepository(Empresa);
+    const habilidadeRepository = AppDataSource.getRepository(Habilidade);
+    const alunoHabilidadeRepository =
+      AppDataSource.getRepository(AlunoHabilidade);
 
     const usuarioExistente = await usuarioRepository.findOne({
       where: { email },
@@ -63,6 +192,11 @@ router.post("/register", async (req, res) => {
 
     const cpfLimpo = onlyNumbers(cpf);
     const cnpjLimpo = onlyNumbers(cnpj);
+    const cursoNormalizado = typeof curso === "string" ? curso.trim() : "";
+    const instituicaoNormalizada =
+      typeof instituicao === "string" ? instituicao.trim() : "";
+    const cepLimpo = onlyNumbers(cep);
+    const curriculoArquivo = req.file?.filename;
 
     if (perfil === UsuarioPerfil.ALUNO) {
       if (!cpfLimpo) {
@@ -73,7 +207,25 @@ router.post("/register", async (req, res) => {
 
       if (!cpfValidator.isValid(cpfLimpo)) {
         return res.status(400).json({
-          message: "CPF inválido",
+          message: "CPF inválido. Confira os números informados.",
+        });
+      }
+
+      if (!CURSOS_PERMITIDOS.includes(cursoNormalizado)) {
+        return res.status(400).json({
+          message: "Curso inválido. Selecione uma opção da lista.",
+        });
+      }
+
+      if (!INSTITUICOES_PERMITIDAS.includes(instituicaoNormalizada)) {
+        return res.status(400).json({
+          message: "Instituição inválida. Selecione uma opção da lista.",
+        });
+      }
+
+      if (!cepLimpo || cepLimpo.length !== 8) {
+        return res.status(400).json({
+          message: "CEP inválido. Informe os 8 dígitos.",
         });
       }
 
@@ -97,7 +249,13 @@ router.post("/register", async (req, res) => {
 
       if (!cnpjValidator.isValid(cnpjLimpo)) {
         return res.status(400).json({
-          message: "CNPJ inválido",
+          message: "CNPJ inválido. Confira os números informados.",
+        });
+      }
+
+      if (!cepLimpo || cepLimpo.length !== 8) {
+        return res.status(400).json({
+          message: "CEP inválido. Informe os 8 dígitos.",
         });
       }
 
@@ -127,33 +285,83 @@ router.post("/register", async (req, res) => {
       const aluno = alunoRepository.create({
         id: usuarioSalvo.id,
         cpf: cpfLimpo,
-        curso: curso || null,
-        instituicao: instituicao || null,
-        ano_conclusao: ano_conclusao || null,
-        cep: cep || null,
-        endereco: endereco || null,
-        numero: numero || null,
-        latitude: latitude ?? null,
-        longitude: longitude ?? null,
-        url_curriculo: url_curriculo || null
+        curso: cursoNormalizado || undefined,
+        instituicao: instituicaoNormalizada || undefined,
+        ano_conclusao: ano_conclusao || undefined,
+        cep: cepLimpo || undefined,
+        endereco: endereco || undefined,
+        numero: numero || undefined,
+        latitude: latitude ?? undefined,
+        longitude: longitude ?? undefined,
+        url_curriculo: curriculoArquivo || undefined,
       });
 
       await alunoRepository.save(aluno);
+
+      const habilidadesRecebidas = [
+        ...parseArrayField(habilidadeIds),
+        ...parseArrayField(habilidades),
+        ...parseArrayField(skills),
+      ];
+      const idsRecebidos = habilidadesRecebidas
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item) && item > 0);
+      const nomesRecebidos = habilidadesRecebidas
+        .filter((item) => typeof item === "string" && Number.isNaN(Number(item)))
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      const habilidadesPorId = idsRecebidos.length
+        ? await habilidadeRepository.find({ where: { id: In(idsRecebidos) } })
+        : [];
+      const habilidadesPorNome = nomesRecebidos.length
+        ? await habilidadeRepository.find({ where: { nome: In(nomesRecebidos) } })
+        : [];
+      const habilidadeIdsUnicos = Array.from(
+        new Set(
+          [...habilidadesPorId, ...habilidadesPorNome].map(
+            (habilidade) => habilidade.id
+          )
+        )
+      );
+
+      if (habilidadeIdsUnicos.length > 0) {
+        await alunoHabilidadeRepository.save(
+          habilidadeIdsUnicos.map((habilidadeId) =>
+            alunoHabilidadeRepository.create({
+              aluno_id: aluno.id,
+              habilidade_id: habilidadeId,
+            })
+          )
+        );
+      }
     }
 
     if (perfil === UsuarioPerfil.EMPRESA) {
       const empresa = empresaRepository.create({
         id: usuarioSalvo.id,
         cnpj: cnpjLimpo,
-        descricao: descricao || null,
-        latitude: latitude ?? null,
-        longitude: longitude ?? null,
+        descricao: descricao || undefined,
+        latitude: latitude ?? undefined,
+        longitude: longitude ?? undefined,
       });
 
       await empresaRepository.save(empresa);
     }
 
+    const secret = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
+    const token = jwt.sign(
+      {
+        id: usuarioSalvo.id,
+        userId: usuarioSalvo.id,
+        perfil: usuarioSalvo.perfil,
+      },
+      secret,
+      { expiresIn: "1d" }
+    );
+
     return res.status(201).json({
+      token,
       id: usuarioSalvo.id,
       nome_exibicao: usuarioSalvo.nome_exibicao,
       email: usuarioSalvo.email,

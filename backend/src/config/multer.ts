@@ -14,21 +14,20 @@ const storage = multer.diskStorage({
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
-    // Regra mantida: uuid_data_nome.pdf (Mas gerando com o crypto nativo)
     const uuid = crypto.randomUUID(); // 👈 Gera um UUID v4 perfeitamente idêntico
     const data = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
-    const nomeOriginal = file.originalname.replace(/\s+/g, "_"); // Remove espaços para evitar erro em URL
     
-    cb(null, `${uuid}_${data}_${nomeOriginal}`);
+    cb(null, `${uuid}_${data}.pdf`);
   },
 });
 
 export const uploadConfig = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    const mimeTypeAceito = "application/pdf";
+    const mimeTypesAceitos = ["application/pdf", "application/octet-stream"];
+    const extensaoAceita = path.extname(file.originalname).toLowerCase() === ".pdf";
 
-    if (file.mimetype === mimeTypeAceito) {
+    if (mimeTypesAceitos.includes(file.mimetype) && extensaoAceita) {
       cb(null, true);
     } else {
       cb(new Error("Apenas arquivos .pdf são permitidos!"));
