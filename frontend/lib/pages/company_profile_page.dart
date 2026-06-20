@@ -74,13 +74,23 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       );
 
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final empresaAtualizada = data['empresa'] ?? data;
+        final nomeAtualizado = empresaAtualizada['usuario']?['nome_exibicao']
+            ?.toString();
+
         setState(() {
           isEditing = false;
-          empresaData?['usuario']['nome_exibicao'] = _nomeController.text
-              .trim();
+          empresaData = empresaAtualizada;
+          if (nomeAtualizado != null && nomeAtualizado.isNotEmpty) {
+            _nomeController.text = nomeAtualizado;
+          }
         });
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_nome', _nomeController.text.trim());
+        if (nomeAtualizado != null && nomeAtualizado.isNotEmpty) {
+          await prefs.setString('user_nome', nomeAtualizado);
+        }
+        await carregarPerfil();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -88,7 +98,12 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
           );
         }
       } else {
-        mostrarErro('Erro ao guardar as alterações.');
+        String mensagem = 'Erro ao guardar as alterações.';
+        if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          mensagem = data['message'] ?? mensagem;
+        }
+        mostrarErro(mensagem);
       }
     } catch (_) {
       mostrarErro('Erro de ligação ao servidor.');

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
+import '../constants/cursos.dart';
 import '../config/api_config.dart';
 import 'chat_page.dart';
 import 'chat_list_page.dart';
@@ -32,7 +33,10 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   bool alunoTemCurriculoPerfil = false;
 
   double _raioBusca = 10.0;
+  bool _filtrarPorDistancia = false;
   String _modalidadeFiltro = 'TODAS';
+  String _cursoFiltro = 'TODOS';
+  int? _anoConclusaoFiltro;
 
   @override
   void initState() {
@@ -94,12 +98,22 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
 
   Future<void> carregarVagas() async {
     try {
-      final queryParams = <String, String>{
-        'distanciaKm': _raioBusca.round().toString(),
-      };
+      final queryParams = <String, String>{};
+
+      if (_filtrarPorDistancia) {
+        queryParams['distanciaKm'] = _raioBusca.round().toString();
+      }
 
       if (_modalidadeFiltro != 'TODAS') {
         queryParams['modalidade'] = _modalidadeFiltro;
+      }
+
+      if (_cursoFiltro != 'TODOS') {
+        queryParams['curso'] = _cursoFiltro;
+      }
+
+      if (_anoConclusaoFiltro != null) {
+        queryParams['anoConclusao'] = _anoConclusaoFiltro.toString();
       }
 
       final response = await http.get(
@@ -586,7 +600,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     return null;
   }
 
-  double? distanciaKm(dynamic item) {
+  double? distanciaDaVaga(dynamic item) {
     final value = item['distancia_km'];
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value);
@@ -594,7 +608,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   }
 
   String labelDistancia(dynamic vaga) {
-    final distancia = distanciaKm(vaga);
+    final distancia = distanciaDaVaga(vaga);
     final modalidade = vaga['modalidade']?.toString();
 
     if (distancia != null) {
@@ -674,6 +688,46 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         );
       }).toList(),
     );
+  }
+
+  int? inteiroOpcional(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
+  }
+
+  List<String> cursosDaVaga(dynamic vaga) {
+    final raw = vaga['cursos_destinados'] ?? vaga['cursosDestinados'];
+    if (raw is! List) return [];
+
+    return raw
+        .map(
+          (curso) =>
+              canonicalizarCurso(curso.toString()) ?? curso.toString().trim(),
+        )
+        .where((curso) => curso.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  String textoCursosDaVaga(dynamic vaga) {
+    final cursos = cursosDaVaga(vaga);
+    if (cursos.isEmpty) return 'Todos os cursos';
+    return 'Cursos: ${cursos.join(', ')}';
+  }
+
+  String textoConclusaoDaVaga(dynamic vaga) {
+    final min = inteiroOpcional(
+      vaga['ano_conclusao_min'] ?? vaga['anoConclusaoMin'],
+    );
+    final max = inteiroOpcional(
+      vaga['ano_conclusao_max'] ?? vaga['anoConclusaoMax'],
+    );
+
+    if (min != null && max != null) return 'Conclusão entre $min e $max';
+    if (max != null) return 'Conclusão até $max';
+    if (min != null) return 'Conclusão a partir de $min';
+    return 'Sem restrição de conclusão';
   }
 
   Widget cardVaga(dynamic vaga) {
@@ -808,6 +862,53 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                         fontSize: 13,
                         color: Colors.grey.shade600,
                       ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.school_outlined,
+                          size: 16,
+                          color: Colors.grey.shade500,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            textoCursosDaVaga(vaga),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.event_available_outlined,
+                          size: 16,
+                          color: Colors.grey.shade500,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          textoConclusaoDaVaga(vaga),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1146,65 +1247,164 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                                 ),
                                 const SizedBox(height: 12),
                                 Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: DropdownButtonFormField<String>(
+                                        initialValue: _cursoFiltro,
+                                        isExpanded: true,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Curso',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        items: [
+                                          const DropdownMenuItem(
+                                            value: 'TODOS',
+                                            child: Text('Todos os cursos'),
+                                          ),
+                                          ...cursosPadronizados.map(
+                                            (curso) => DropdownMenuItem(
+                                              value: curso,
+                                              child: Text(
+                                                curso,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        onChanged: (value) async {
+                                          if (value == null) return;
+                                          setState(() {
+                                            _cursoFiltro = value;
+                                            isLoading = true;
+                                          });
+                                          await carregarVagas();
+                                          if (!mounted) return;
+                                          setState(() => isLoading = false);
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: DropdownButtonFormField<int?>(
+                                        initialValue: _anoConclusaoFiltro,
+                                        isExpanded: true,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Conclusão',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        items: [
+                                          const DropdownMenuItem<int?>(
+                                            value: null,
+                                            child: Text('Qualquer ano'),
+                                          ),
+                                          ...List.generate(
+                                            12,
+                                            (index) => 2024 + index,
+                                          ).map(
+                                            (ano) => DropdownMenuItem<int?>(
+                                              value: ano,
+                                              child: Text(ano.toString()),
+                                            ),
+                                          ),
+                                        ],
+                                        onChanged: (value) async {
+                                          setState(() {
+                                            _anoConclusaoFiltro = value;
+                                            isLoading = true;
+                                          });
+                                          await carregarVagas();
+                                          if (!mounted) return;
+                                          setState(() => isLoading = false);
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     RichText(
                                       text: TextSpan(
-                                        text: 'Buscar vagas em um raio de ',
+                                        text: _filtrarPorDistancia
+                                            ? 'Buscar vagas em um raio de '
+                                            : 'Filtro de distância desativado',
                                         style: const TextStyle(
                                           color: Color(0xFF374151),
                                           fontFamily: 'Inter',
                                           fontSize: 14,
                                         ),
                                         children: [
-                                          TextSpan(
-                                            text: '${_raioBusca.toInt()} km',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFF7C3AED),
+                                          if (_filtrarPorDistancia)
+                                            TextSpan(
+                                              text: '${_raioBusca.toInt()} km',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFF7C3AED),
+                                              ),
                                             ),
-                                          ),
                                         ],
                                       ),
                                     ),
-                                    const Text(
+                                    Switch(
+                                      value: _filtrarPorDistancia,
+                                      activeColor: const Color(0xFF7C3AED),
+                                      onChanged: (value) async {
+                                        setState(() {
+                                          _filtrarPorDistancia = value;
+                                          isLoading = true;
+                                        });
+                                        await carregarVagas();
+                                        if (!mounted) return;
+                                        setState(() => isLoading = false);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                if (_filtrarPorDistancia) ...[
+                                  const SizedBox(height: 8),
+                                  SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      activeTrackColor: const Color(0xFF7C3AED),
+                                      inactiveTrackColor: const Color(
+                                        0xFF7C3AED,
+                                      ).withOpacity(0.2),
+                                      thumbColor: Colors.white,
+                                      overlayColor: const Color(
+                                        0xFF7C3AED,
+                                      ).withOpacity(0.1),
+                                      trackHeight: 6.0,
+                                    ),
+                                    child: Slider(
+                                      value: _raioBusca,
+                                      min: 1,
+                                      max: 50,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _raioBusca = value;
+                                        });
+                                      },
+                                      onChangeEnd: (_) async {
+                                        await carregarVagas();
+                                        if (mounted) setState(() {});
+                                      },
+                                    ),
+                                  ),
+                                  const Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
                                       '50 km',
                                       style: TextStyle(
                                         color: Colors.grey,
                                         fontSize: 12,
                                       ),
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    activeTrackColor: const Color(0xFF7C3AED),
-                                    inactiveTrackColor: const Color(
-                                      0xFF7C3AED,
-                                    ).withOpacity(0.2),
-                                    thumbColor: Colors.white,
-                                    overlayColor: const Color(
-                                      0xFF7C3AED,
-                                    ).withOpacity(0.1),
-                                    trackHeight: 6.0,
                                   ),
-                                  child: Slider(
-                                    value: _raioBusca,
-                                    min: 1,
-                                    max: 50,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _raioBusca = value;
-                                      });
-                                    },
-                                    onChangeEnd: (_) async {
-                                      await carregarVagas();
-                                      if (mounted) setState(() {});
-                                    },
-                                  ),
-                                ),
+                                ],
                               ],
                             ),
                           ),

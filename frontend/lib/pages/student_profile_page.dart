@@ -38,6 +38,8 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   double? _latitude;
   double? _longitude;
   String? _urlCurriculo;
+  String? _cepOriginal;
+  String? _enderecoOriginal;
 
   List<dynamic> _habilidadesDisponiveis = [];
   Set<int> _habilidadesSelecionadas = {};
@@ -104,6 +106,8 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
               '';
 
           _urlCurriculo = data['url_curriculo'] ?? aluno['url_curriculo'];
+          _cepOriginal = _cepController.text;
+          _enderecoOriginal = _enderecoController.text;
 
           final relacoes =
               data['alunoHabilidades'] ?? aluno['alunoHabilidades'];
@@ -272,16 +276,24 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   Future<void> _salvarPerfil() async {
     setState(() => _isSaving = true);
 
-    final payload = {
-      'nome_exibicao': _nomeController.text,
+    final prefs = await SharedPreferences.getInstance();
+    final enderecoAlterado =
+        _onlyNumbers(_cepController.text) != _onlyNumbers(_cepOriginal ?? '') ||
+        _enderecoController.text.trim() != (_enderecoOriginal ?? '').trim();
+
+    final payload = <String, dynamic>{
+      'nome_exibicao': _nomeController.text.trim(),
       'cep': _onlyNumbers(_cepController.text),
       'endereco': _enderecoController.text,
-      'latitude': _latitude,
-      'longitude': _longitude,
       'instituicao': _instituicaoController.text,
       'curso': _cursoController.text,
       'ano_conclusao': int.tryParse(_anoController.text),
     };
+
+    if (!enderecoAlterado && _hasValidCoordinates(_latitude, _longitude)) {
+      payload['latitude'] = _latitude;
+      payload['longitude'] = _longitude;
+    }
 
     try {
       final response = await http.put(
@@ -294,6 +306,16 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
       );
 
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final alunoAtualizado = data['aluno'] ?? data;
+        final usuarioAtualizado = alunoAtualizado['usuario'] ?? data['usuario'];
+        final nomeAtualizado = usuarioAtualizado?['nome_exibicao']?.toString();
+
+        if (nomeAtualizado != null && nomeAtualizado.isNotEmpty) {
+          _nomeController.text = nomeAtualizado;
+          await prefs.setString('user_nome', nomeAtualizado);
+        }
+
         final habilidadesSalvas = await _salvarHabilidades();
         if (!mounted) return;
 
@@ -307,6 +329,8 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
           _isEditing = false;
           _isSaving = false;
         });
+        await _carregarPerfil();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Perfil atualizado com sucesso!'),
@@ -314,8 +338,13 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
           ),
         );
       } else {
+        String mensagem = 'Erro ao salvar alterações.';
+        if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          mensagem = data['message'] ?? mensagem;
+        }
         setState(() => _isSaving = false);
-        _mostrarErro('Erro ao salvar alterações.');
+        _mostrarErro(mensagem);
       }
     } catch (e) {
       setState(() => _isSaving = false);
@@ -498,8 +527,17 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
     }).toList();
   }
 
-  Widget _buildMap() {
-    if (_latitude == null || _longitude == null) {
+  bool _hasValidCoordinates(double? lat, double? lng) {
+    if (lat == null || lng == null) return false;
+    if (lat == 0 && lng == 0) return false;
+    return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  }
+
+  Widget _buildEnderecoResumo() {
+    final endereco = _enderecoController.text.trim();
+    final cep = _cepController.text.trim();
+
+    if (endereco.isEmpty && cep.isEmpty) {
       return const Padding(
         padding: EdgeInsets.only(left: 32, top: 8),
         child: Text(
@@ -523,19 +561,30 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
           const Icon(Icons.location_on_outlined, color: Color(0xFF7C3AED)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              'Lat: ${_latitude!.toStringAsFixed(4)} | Long: ${_longitude!.toStringAsFixed(4)}',
-              style: const TextStyle(color: Color(0xFF1F2937), fontSize: 13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (endereco.isNotEmpty)
+                  Text(
+                    endereco,
+                    style: const TextStyle(
+                      color: Color(0xFF1F2937),
+                      fontSize: 13,
+                    ),
+                  ),
+                if (cep.isNotEmpty)
+                  Padding(
+                    padding: EdgeInsets.only(top: endereco.isNotEmpty ? 4 : 0),
+                    child: Text(
+                      'CEP: $cep',
+                      style: const TextStyle(
+                        color: Color(0xFF6B7280),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ),
-          TextButton.icon(
-            onPressed: () {
-              final url =
-                  'https://www.google.com/maps/search/?api=1&query=$_latitude,$_longitude';
-              import_html.window.open(url, '_blank');
-            },
-            icon: const Icon(Icons.open_in_new, size: 16),
-            label: const Text('Abrir mapa'),
           ),
         ],
       ),
@@ -714,7 +763,7 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
                         ),
                       ],
 
-                      _buildMap(),
+                      _buildEnderecoResumo(),
                     ],
                   ),
 

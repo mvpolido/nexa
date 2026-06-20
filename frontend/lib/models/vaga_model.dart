@@ -5,6 +5,9 @@ class Vaga {
   final String? requisitos;
   final String modalidade;
   final String empresaNome;
+  final List<String> cursosDestinados;
+  final int? anoConclusaoMin;
+  final int? anoConclusaoMax;
 
   Vaga({
     required this.id,
@@ -13,10 +16,18 @@ class Vaga {
     this.requisitos,
     required this.modalidade,
     required this.empresaNome,
+    this.cursosDestinados = const [],
+    this.anoConclusaoMin,
+    this.anoConclusaoMax,
   });
 
   // Este método transforma o JSON que vem do Node.js em um objeto Vaga do Dart
   factory Vaga.fromJson(Map<String, dynamic> json) {
+    final cursosRaw = json['cursos_destinados'] ?? json['cursosDestinados'];
+    final cursos = cursosRaw is List
+        ? cursosRaw.map((curso) => curso.toString()).toList()
+        : <String>[];
+
     return Vaga(
       id: json['id'],
       titulo: json['titulo'],
@@ -24,7 +35,22 @@ class Vaga {
       requisitos: json['requisitos'],
       modalidade: json['modalidade'],
       // Note que no seu Controller enviamos a relação 'empresa'
-      empresaNome: json['empresa'] != null ? json['empresa']['nome_fantasia'] : 'Empresa não identificada',
+      empresaNome: json['empresa'] != null
+          ? json['empresa']['nome_fantasia']
+          : 'Empresa não identificada',
+      cursosDestinados: cursos,
+      anoConclusaoMin: _intFromJson(
+        json['ano_conclusao_min'] ?? json['anoConclusaoMin'],
+      ),
+      anoConclusaoMax: _intFromJson(
+        json['ano_conclusao_max'] ?? json['anoConclusaoMax'],
+      ),
     );
+  }
+
+  static int? _intFromJson(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
   }
 }

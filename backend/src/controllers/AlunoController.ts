@@ -8,7 +8,11 @@ import { AlunoHabilidade } from "../entities/AlunoHabilidade";
 import { Candidatura } from "../entities/Candidatura";
 import { Empresa } from "../entities/Empresa";
 import { Habilidade } from "../entities/Habilidade";
-import { UsuarioPerfil } from "../entities/Usuario";
+import { Usuario, UsuarioPerfil } from "../entities/Usuario";
+import {
+  coordenadasValidas,
+  geocodificarEndereco,
+} from "../utils/geocoding";
 
 export class AlunoController {
   private static async empresaPodeAcessarAluno(
@@ -104,17 +108,96 @@ export class AlunoController {
       }
 
       const alunoRepository = AppDataSource.getRepository(Aluno);
-      const aluno = await alunoRepository.findOneBy({ id: usuarioLogadoId });
+      const usuarioRepository = AppDataSource.getRepository(Usuario);
+
+      const aluno = await alunoRepository.findOne({
+        where: { id: usuarioLogadoId },
+        relations: ["usuario"],
+      });
 
       if (!aluno) {
         return res.status(404).json({ message: "Perfil não encontrado." });
       }
 
-      // Atualiza os dados recebidos do frontend
-      alunoRepository.merge(aluno, req.body);
+      const { nome_exibicao } = req.body;
+
+      if (nome_exibicao !== undefined) {
+        if (typeof nome_exibicao !== "string" || !nome_exibicao.trim()) {
+          return res.status(400).json({
+            message: "Nome de exibição é obrigatório.",
+          });
+        }
+
+        if (aluno.usuario) {
+          aluno.usuario.nome_exibicao = nome_exibicao.trim();
+          await usuarioRepository.save(aluno.usuario);
+        }
+      }
+
+      const enderecoFoiAlterado = ["cep", "endereco", "numero"].some((campo) =>
+        Object.prototype.hasOwnProperty.call(req.body, campo)
+      );
+      const latitudeEnviada = Object.prototype.hasOwnProperty.call(
+        req.body,
+        "latitude"
+      );
+      const longitudeEnviada = Object.prototype.hasOwnProperty.call(
+        req.body,
+        "longitude"
+      );
+
+      if (latitudeEnviada || longitudeEnviada) {
+        if (!coordenadasValidas(req.body.latitude, req.body.longitude)) {
+          return res.status(400).json({
+            message: "Latitude e longitude devem ser coordenadas válidas.",
+          });
+        }
+
+        aluno.latitude = Number(req.body.latitude);
+        aluno.longitude = Number(req.body.longitude);
+      }
+
+      const camposAluno: (keyof Aluno)[] = [
+        "cep",
+        "endereco",
+        "numero",
+        "instituicao",
+        "curso",
+        "ano_conclusao",
+      ];
+
+      for (const campo of camposAluno) {
+        if (Object.prototype.hasOwnProperty.call(req.body, campo)) {
+          (aluno as any)[campo] = req.body[campo];
+        }
+      }
+
+      if (!latitudeEnviada && !longitudeEnviada && enderecoFoiAlterado) {
+        const coordenadas = await geocodificarEndereco({
+          cep: aluno.cep,
+          endereco: aluno.endereco,
+          numero: aluno.numero,
+        });
+
+        (aluno as any).latitude = coordenadas?.latitude ?? null;
+        (aluno as any).longitude = coordenadas?.longitude ?? null;
+      }
+
       await alunoRepository.save(aluno);
 
-      return res.status(200).json({ message: "Perfil atualizado com sucesso!" });
+      const alunoAtualizado = await alunoRepository.findOne({
+        where: { id: usuarioLogadoId },
+        relations: [
+          "usuario",
+          "alunoHabilidades",
+          "alunoHabilidades.habilidade",
+        ],
+      });
+
+      return res.status(200).json({
+        message: "Perfil atualizado com sucesso!",
+        aluno: alunoAtualizado,
+      });
     } catch (error: any) {
       return res.status(500).json({
         message: "Erro ao atualizar perfil.",

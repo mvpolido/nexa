@@ -16,19 +16,53 @@ const habilidadesIniciais = [
   { nome: "Flutter", area: HabilidadeArea.TECNOLOGIA },
   { nome: "Dart", area: HabilidadeArea.TECNOLOGIA },
   { nome: "React", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Node.js", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Next.js", area: HabilidadeArea.TECNOLOGIA },
   { nome: "TypeScript", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "JavaScript", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Node.js", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Express", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Java", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Spring Boot", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Python", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "Docker", area: HabilidadeArea.TECNOLOGIA },
   { nome: "Git", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Docker", area: HabilidadeArea.ENGENHARIA },
+  { nome: "GitHub", area: HabilidadeArea.TECNOLOGIA },
+  { nome: "APIs REST", area: HabilidadeArea.TECNOLOGIA },
   { nome: "PostgreSQL", area: HabilidadeArea.EXATAS },
-  { nome: "APIs REST", area: HabilidadeArea.COMUNICACAO },
-  { nome: "Comunicação", area: HabilidadeArea.COMUNICACAO },
-  { nome: "Gestão de projetos", area: HabilidadeArea.GESTAO },
-  { nome: "Figma", area: HabilidadeArea.DESIGN },
-  { nome: "Bioinformática", area: HabilidadeArea.BIOLOGIA },
-  { nome: "Análise laboratorial", area: HabilidadeArea.QUIMICA },
-  { nome: "Modelagem física", area: HabilidadeArea.FISICA },
+  { nome: "MySQL", area: HabilidadeArea.EXATAS },
+  { nome: "Estatística", area: HabilidadeArea.EXATAS },
+  { nome: "Matemática aplicada", area: HabilidadeArea.EXATAS },
+  { nome: "Análise de dados", area: HabilidadeArea.EXATAS },
+  { nome: "CAD", area: HabilidadeArea.ENGENHARIA },
+  { nome: "AutoCAD", area: HabilidadeArea.ENGENHARIA },
+  { nome: "SolidWorks", area: HabilidadeArea.ENGENHARIA },
+  { nome: "Leitura de projetos", area: HabilidadeArea.ENGENHARIA },
+  { nome: "Controle de qualidade", area: HabilidadeArea.ENGENHARIA },
   { nome: "Saúde digital", area: HabilidadeArea.SAUDE },
+  { nome: "Biossegurança", area: HabilidadeArea.SAUDE },
+  { nome: "Atendimento ao paciente", area: HabilidadeArea.SAUDE },
+  { nome: "Análise laboratorial", area: HabilidadeArea.QUIMICA },
+  { nome: "Química analítica", area: HabilidadeArea.QUIMICA },
+  { nome: "Controle de reagentes", area: HabilidadeArea.QUIMICA },
+  { nome: "Modelagem física", area: HabilidadeArea.FISICA },
+  { nome: "Instrumentação", area: HabilidadeArea.FISICA },
+  { nome: "Medições técnicas", area: HabilidadeArea.FISICA },
+  { nome: "Bioinformática", area: HabilidadeArea.BIOLOGIA },
+  { nome: "Microbiologia", area: HabilidadeArea.BIOLOGIA },
+  { nome: "Biotecnologia", area: HabilidadeArea.BIOLOGIA },
+  { nome: "Comunicação", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Inglês básico", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Inglês intermediário", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Redação técnica", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Trabalho em equipe", area: HabilidadeArea.GESTAO },
+  { nome: "Gestão de projetos", area: HabilidadeArea.GESTAO },
+  { nome: "Organização", area: HabilidadeArea.GESTAO },
+  { nome: "Liderança", area: HabilidadeArea.GESTAO },
+  { nome: "Figma", area: HabilidadeArea.DESIGN },
+  { nome: "UI/UX", area: HabilidadeArea.DESIGN },
+  { nome: "HTML", area: HabilidadeArea.DESIGN },
+  { nome: "CSS", area: HabilidadeArea.DESIGN },
+  { nome: "Prototipação", area: HabilidadeArea.DESIGN },
 ];
 
 async function runSeed() {
@@ -79,8 +113,8 @@ async function runSeed() {
       aluno.cpf = cpf;
       aluno.curso = "Engenharia de Software";
       aluno.url_curriculo = "https://example.com/aluno-teste-cv.pdf";
-      aluno.latitude = -23.5505;
-      aluno.longitude = -46.6333;
+      aluno.latitude = undefined;
+      aluno.longitude = undefined;
 
       return alunoRepository.save(aluno);
     };
@@ -100,8 +134,8 @@ async function runSeed() {
       empresa.id = usuario.id;
       empresa.cnpj = cnpj;
       empresa.descricao = "Empresa de tecnologia para testes da sprint";
-      empresa.latitude = -23.5505;
-      empresa.longitude = -46.6333;
+      empresa.latitude = undefined;
+      empresa.longitude = undefined;
 
       return empresaRepository.save(empresa);
     };
@@ -152,6 +186,9 @@ async function runSeed() {
       latitude?: number;
       longitude?: number;
       habilidades: string[];
+      cursos_destinados?: string[] | null;
+      ano_conclusao_min?: number | null;
+      ano_conclusao_max?: number | null;
     }) => {
       let vaga = await vagaRepository.findOne({
         where: { empresa_id: dados.empresa_id, titulo: dados.titulo },
@@ -175,6 +212,9 @@ async function runSeed() {
       vaga.latitude = dados.latitude;
       vaga.longitude = dados.longitude;
       vaga.habilidades = dados.habilidades;
+      vaga.cursos_destinados = dados.cursos_destinados ?? null;
+      vaga.ano_conclusao_min = dados.ano_conclusao_min ?? null;
+      vaga.ano_conclusao_max = dados.ano_conclusao_max ?? null;
       vaga.ativo = 1;
 
       return vagaRepository.save(vaga);
@@ -246,6 +286,13 @@ async function runSeed() {
         requisitos: "Conhecimento em Flutter, Dart, Git e APIs REST.",
         modalidade: VagaModalidade.REMOTO,
         habilidades: ["Flutter", "Dart", "Git", "APIs REST", "Comunicação"],
+        cursos_destinados: [
+          "Ciência da Computação",
+          "Engenharia de Software",
+          "Sistemas de Informação",
+        ],
+        ano_conclusao_min: 2026,
+        ano_conclusao_max: 2029,
       },
       {
         titulo: "Desenvolvedor Back-end Node.js",
@@ -257,9 +304,14 @@ async function runSeed() {
         numero: "100",
         cidade: "São Paulo",
         estado: "SP",
-        latitude: -23.5505,
-        longitude: -46.6333,
         habilidades: ["Node.js", "TypeScript", "Docker", "PostgreSQL", "APIs REST"],
+        cursos_destinados: [
+          "Ciência da Computação",
+          "Engenharia de Software",
+          "Sistemas de Informação",
+        ],
+        ano_conclusao_min: 2026,
+        ano_conclusao_max: 2029,
       },
     ];
 

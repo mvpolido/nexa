@@ -4,6 +4,7 @@ import 'dart:html' as import_html;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/cursos.dart';
 import '../widgets/skill_selector.dart';
 import '../config/api_config.dart';
 import 'chat_page.dart';
@@ -214,6 +215,15 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     Set<int> habilidadeIdsSelecionadas = editando
         ? habilidadeIdsDaVaga(vaga)
         : <int>{};
+    Set<String> cursosDestinadosSelecionados = editando
+        ? cursosDaVaga(vaga).toSet()
+        : <String>{};
+    int? anoConclusaoMin = editando
+        ? inteiroOpcional(vaga['ano_conclusao_min'] ?? vaga['anoConclusaoMin'])
+        : null;
+    int? anoConclusaoMax = editando
+        ? inteiroOpcional(vaga['ano_conclusao_max'] ?? vaga['anoConclusaoMax'])
+        : null;
 
     final formKey = GlobalKey<FormState>();
 
@@ -265,6 +275,19 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
             Future<void> salvar() async {
               if (!(formKey.currentState?.validate() ?? false)) return;
 
+              if (anoConclusaoMin != null &&
+                  anoConclusaoMax != null &&
+                  anoConclusaoMin! > anoConclusaoMax!) {
+                ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Ano mínimo de conclusão não pode ser maior que o máximo.',
+                    ),
+                  ),
+                );
+                return;
+              }
+
               setDialogState(() {
                 salvando = true;
               });
@@ -280,9 +303,10 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                   'numero': numeroController.text.trim(),
                   'cidade': cidadeController.text.trim(),
                   'estado': estadoController.text.trim(),
-                  'latitude': vaga?['latitude'],
-                  'longitude': vaga?['longitude'],
                   'habilidadeIds': habilidadeIdsSelecionadas.toList(),
+                  'cursos_destinados': cursosDestinadosSelecionados.toList(),
+                  'ano_conclusao_min': anoConclusaoMin,
+                  'ano_conclusao_max': anoConclusaoMax,
                 });
 
                 final response = editando
@@ -354,6 +378,102 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                   });
                 }
               }
+            }
+
+            Future<void> selecionarCursos() async {
+              final tempSelecionados = Set<String>.from(
+                cursosDestinadosSelecionados,
+              );
+              String busca = '';
+
+              await showDialog(
+                context: dialogContext,
+                builder: (selectorContext) {
+                  return StatefulBuilder(
+                    builder: (context, setSelectorState) {
+                      final cursosFiltrados = cursosPadronizados.where((curso) {
+                        if (busca.trim().isEmpty) return true;
+                        return normalizarCursoBusca(
+                          curso,
+                        ).contains(normalizarCursoBusca(busca));
+                      }).toList();
+
+                      return AlertDialog(
+                        title: const Text('Selecionar cursos'),
+                        content: SizedBox(
+                          width: 520,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextField(
+                                decoration: const InputDecoration(
+                                  labelText: 'Buscar curso',
+                                  border: OutlineInputBorder(),
+                                ),
+                                onChanged: (value) {
+                                  setSelectorState(() => busca = value);
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              Flexible(
+                                child: SingleChildScrollView(
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: cursosFiltrados.map((curso) {
+                                        final selected = tempSelecionados
+                                            .contains(curso);
+                                        return FilterChip(
+                                          label: Text(curso),
+                                          selected: selected,
+                                          onSelected: (value) {
+                                            setSelectorState(() {
+                                              if (value) {
+                                                tempSelecionados.add(curso);
+                                              } else {
+                                                tempSelecionados.remove(curso);
+                                              }
+                                            });
+                                          },
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.of(selectorContext).pop(),
+                            child: const Text('Cancelar'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              tempSelecionados.clear();
+                              setSelectorState(() {});
+                            },
+                            child: const Text('Limpar'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () {
+                              setDialogState(() {
+                                cursosDestinadosSelecionados = tempSelecionados;
+                              });
+                              Navigator.of(selectorContext).pop();
+                            },
+                            child: const Text('Aplicar'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
+              );
             }
 
             return AlertDialog(
@@ -542,6 +662,114 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                                   }
 
                                   return null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Cursos destinados',
+                            style: TextStyle(
+                              color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              if (cursosDestinadosSelecionados.isEmpty)
+                                Chip(
+                                  label: const Text('Todos os cursos'),
+                                  backgroundColor: Colors.grey.shade100,
+                                )
+                              else
+                                ...cursosDestinadosSelecionados.map(
+                                  (curso) => Chip(
+                                    label: Text(curso),
+                                    onDeleted: () {
+                                      setDialogState(() {
+                                        cursosDestinadosSelecionados.remove(
+                                          curso,
+                                        );
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ActionChip(
+                                avatar: const Icon(Icons.search, size: 18),
+                                label: const Text('Selecionar cursos'),
+                                onPressed: selecionarCursos,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<int?>(
+                                initialValue: anoConclusaoMin,
+                                decoration: const InputDecoration(
+                                  labelText: 'Conclusão mínima',
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: [
+                                  const DropdownMenuItem<int?>(
+                                    value: null,
+                                    child: Text('Não informar'),
+                                  ),
+                                  ...List.generate(
+                                    12,
+                                    (index) => 2024 + index,
+                                  ).map(
+                                    (ano) => DropdownMenuItem<int?>(
+                                      value: ano,
+                                      child: Text(ano.toString()),
+                                    ),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  setDialogState(() {
+                                    anoConclusaoMin = value;
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonFormField<int?>(
+                                initialValue: anoConclusaoMax,
+                                decoration: const InputDecoration(
+                                  labelText: 'Conclusão máxima',
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: [
+                                  const DropdownMenuItem<int?>(
+                                    value: null,
+                                    child: Text('Não informar'),
+                                  ),
+                                  ...List.generate(
+                                    12,
+                                    (index) => 2024 + index,
+                                  ).map(
+                                    (ano) => DropdownMenuItem<int?>(
+                                      value: ano,
+                                      child: Text(ano.toString()),
+                                    ),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  setDialogState(() {
+                                    anoConclusaoMax = value;
+                                  });
                                 },
                               ),
                             ),
@@ -1314,6 +1542,48 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         .toSet();
   }
 
+  int? inteiroOpcional(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
+  }
+
+  List<String> cursosDaVaga(dynamic vaga) {
+    final raw = vaga['cursos_destinados'] ?? vaga['cursosDestinados'];
+    if (raw is! List) return [];
+
+    return raw
+        .map(
+          (curso) =>
+              canonicalizarCurso(curso.toString()) ?? curso.toString().trim(),
+        )
+        .where((curso) => curso.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  String textoCursosDaVaga(dynamic vaga) {
+    final cursos = cursosDaVaga(vaga);
+    if (cursos.isEmpty) return 'Cursos: Todos os cursos';
+    return 'Cursos: ${cursos.join(', ')}';
+  }
+
+  String textoConclusaoDaVaga(dynamic vaga) {
+    final min = inteiroOpcional(
+      vaga['ano_conclusao_min'] ?? vaga['anoConclusaoMin'],
+    );
+    final max = inteiroOpcional(
+      vaga['ano_conclusao_max'] ?? vaga['anoConclusaoMax'],
+    );
+
+    if (min != null && max != null) {
+      return 'Conclusão entre $min e $max';
+    }
+    if (max != null) return 'Conclusão até $max';
+    if (min != null) return 'Conclusão a partir de $min';
+    return 'Sem restrição de conclusão';
+  }
+
   // 🛠️ MÉTODOS VISUAIS E RESPONSIVOS (ISSUE #97)
 
   Widget chipsHabilidades(List<dynamic> habilidades) {
@@ -1439,6 +1709,53 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                 ),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
+              ),
+
+              const SizedBox(height: 16),
+
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.school_outlined,
+                        size: 16,
+                        color: Colors.grey.shade500,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          textoCursosDaVaga(vaga),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.event_available_outlined,
+                        size: 16,
+                        color: Colors.grey.shade500,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        textoConclusaoDaVaga(vaga),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
 
               const SizedBox(height: 16),

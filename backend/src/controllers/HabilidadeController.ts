@@ -14,27 +14,45 @@ const HABILIDADES_INICIAIS = [
   { nome: "Java", area: HabilidadeArea.TECNOLOGIA },
   { nome: "Spring Boot", area: HabilidadeArea.TECNOLOGIA },
   { nome: "Python", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "PostgreSQL", area: HabilidadeArea.EXATAS },
-  { nome: "MySQL", area: HabilidadeArea.EXATAS },
   { nome: "Docker", area: HabilidadeArea.TECNOLOGIA },
   { nome: "Git", area: HabilidadeArea.TECNOLOGIA },
   { nome: "GitHub", area: HabilidadeArea.TECNOLOGIA },
   { nome: "APIs REST", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "HTML", area: HabilidadeArea.DESIGN },
-  { nome: "CSS", area: HabilidadeArea.DESIGN },
-  { nome: "Figma", area: HabilidadeArea.DESIGN },
-  { nome: "UI/UX", area: HabilidadeArea.DESIGN },
+  { nome: "PostgreSQL", area: HabilidadeArea.EXATAS },
+  { nome: "MySQL", area: HabilidadeArea.EXATAS },
+  { nome: "Estatística", area: HabilidadeArea.EXATAS },
+  { nome: "Matemática aplicada", area: HabilidadeArea.EXATAS },
+  { nome: "Análise de dados", area: HabilidadeArea.EXATAS },
+  { nome: "CAD", area: HabilidadeArea.ENGENHARIA },
+  { nome: "AutoCAD", area: HabilidadeArea.ENGENHARIA },
+  { nome: "SolidWorks", area: HabilidadeArea.ENGENHARIA },
+  { nome: "Leitura de projetos", area: HabilidadeArea.ENGENHARIA },
+  { nome: "Controle de qualidade", area: HabilidadeArea.ENGENHARIA },
+  { nome: "Saúde digital", area: HabilidadeArea.SAUDE },
+  { nome: "Biossegurança", area: HabilidadeArea.SAUDE },
+  { nome: "Atendimento ao paciente", area: HabilidadeArea.SAUDE },
+  { nome: "Análise laboratorial", area: HabilidadeArea.QUIMICA },
+  { nome: "Química analítica", area: HabilidadeArea.QUIMICA },
+  { nome: "Controle de reagentes", area: HabilidadeArea.QUIMICA },
+  { nome: "Modelagem física", area: HabilidadeArea.FISICA },
+  { nome: "Instrumentação", area: HabilidadeArea.FISICA },
+  { nome: "Medições técnicas", area: HabilidadeArea.FISICA },
+  { nome: "Bioinformática", area: HabilidadeArea.BIOLOGIA },
+  { nome: "Microbiologia", area: HabilidadeArea.BIOLOGIA },
+  { nome: "Biotecnologia", area: HabilidadeArea.BIOLOGIA },
   { nome: "Comunicação", area: HabilidadeArea.COMUNICACAO },
-  { nome: "Trabalho em equipe", area: HabilidadeArea.GESTAO },
   { nome: "Inglês básico", area: HabilidadeArea.COMUNICACAO },
   { nome: "Inglês intermediário", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Redação técnica", area: HabilidadeArea.COMUNICACAO },
+  { nome: "Trabalho em equipe", area: HabilidadeArea.GESTAO },
   { nome: "Gestão de projetos", area: HabilidadeArea.GESTAO },
-  { nome: "CAD", area: HabilidadeArea.ENGENHARIA },
-  { nome: "Estatística", area: HabilidadeArea.EXATAS },
-  { nome: "Saúde digital", area: HabilidadeArea.SAUDE },
-  { nome: "Análise laboratorial", area: HabilidadeArea.QUIMICA },
-  { nome: "Modelagem física", area: HabilidadeArea.FISICA },
-  { nome: "Bioinformática", area: HabilidadeArea.BIOLOGIA }
+  { nome: "Organização", area: HabilidadeArea.GESTAO },
+  { nome: "Liderança", area: HabilidadeArea.GESTAO },
+  { nome: "Figma", area: HabilidadeArea.DESIGN },
+  { nome: "UI/UX", area: HabilidadeArea.DESIGN },
+  { nome: "HTML", area: HabilidadeArea.DESIGN },
+  { nome: "CSS", area: HabilidadeArea.DESIGN },
+  { nome: "Prototipação", area: HabilidadeArea.DESIGN }
 ];
 
 export class HabilidadeController {
@@ -43,7 +61,12 @@ export class HabilidadeController {
       const repo = AppDataSource.getRepository(Habilidade);
 
       const habilidades = await repo.find({
-        order: { nome: "ASC" },
+        select: {
+          id: true,
+          nome: true,
+          area: true,
+        },
+        order: { area: "ASC", nome: "ASC" },
       });
 
       return res.status(200).json(habilidades);
