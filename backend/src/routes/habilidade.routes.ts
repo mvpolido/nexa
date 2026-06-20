@@ -6,8 +6,8 @@ import { adminMiddleware } from "../middlewares/adminMiddleware";
 const router = Router();
 
 router.get("/", authMiddleware, HabilidadeController.getAll);
-router.post("/", authMiddleware, HabilidadeController.create);
-router.post("/seed", authMiddleware, HabilidadeController.seed);
+router.post("/", authMiddleware, adminMiddleware, HabilidadeController.create);
+router.post("/seed", authMiddleware, adminMiddleware, HabilidadeController.seed);
 router.delete("/:id", authMiddleware, adminMiddleware, HabilidadeController.delete);
 
 export default router;
