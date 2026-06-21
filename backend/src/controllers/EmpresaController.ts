@@ -110,9 +110,18 @@ export class EmpresaController {
   async updateMe(req: Request, res: Response) {
     try {
       const usuarioLogadoId = (req as any).usuarioId;
-      
+      const perfilLogado = (req as any).usuarioPerfil;
+
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        return res.status(403).json({ message: 'Apenas empresas podem atualizar este recurso.' });
+      }
+
       // APENAS A RAZÃO SOCIAL É EDITÁVEL CONFORME SOLICITADO
       const { nome_exibicao } = req.body; 
+
+      if (nome_exibicao !== undefined && (typeof nome_exibicao !== 'string' || !nome_exibicao.trim())) {
+        return res.status(400).json({ message: 'Nome de exibição é obrigatório.' });
+      }
 
       const empresaRepository = AppDataSource.getRepository(Empresa);
       const usuarioRepository = AppDataSource.getRepository(Usuario);
@@ -127,14 +136,19 @@ export class EmpresaController {
       }
 
       // Atualiza apenas a Razão Social (nome_exibicao) na tabela Usuario
-      if (nome_exibicao && empresa.usuario) {
-        empresa.usuario.nome_exibicao = nome_exibicao;
+      if (nome_exibicao !== undefined && empresa.usuario) {
+        empresa.usuario.nome_exibicao = nome_exibicao.trim();
         await usuarioRepository.save(empresa.usuario);
       }
 
+      const empresaAtualizada = await empresaRepository.findOne({
+        where: { id: usuarioLogadoId },
+        relations: ["usuario", "avaliacoes", "avaliacoes.alunoUsuario"]
+      });
+
       return res.status(200).json({ 
         message: 'Perfil atualizado com sucesso!',
-        empresa
+        empresa: empresaAtualizada
       });
     } catch (error) {
       console.error('Erro ao atualizar perfil:', error);

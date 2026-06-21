@@ -67,6 +67,15 @@ export class Vaga {
   @Column("simple-array", { nullable: true })
   habilidades?: string[];
 
+  @Column("simple-json", { nullable: true })
+  cursos_destinados?: string[] | null;
+
+  @Column({ type: "smallint", nullable: true })
+  ano_conclusao_min?: number | null;
+
+  @Column({ type: "smallint", nullable: true })
+  ano_conclusao_max?: number | null;
+
   @Column({ type: "smallint", default: 1 })
   ativo!: number;
 

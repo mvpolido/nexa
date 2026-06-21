@@ -22,6 +22,22 @@ const options = {
           properties: {
             id: { type: "integer", example: 1 },
             nome: { type: "string", example: "React" },
+            area: {
+              type: "string",
+              enum: [
+                "TECNOLOGIA",
+                "ENGENHARIA",
+                "EXATAS",
+                "SAUDE",
+                "QUIMICA",
+                "FISICA",
+                "BIOLOGIA",
+                "COMUNICACAO",
+                "GESTAO",
+                "DESIGN",
+              ],
+              example: "TECNOLOGIA",
+            },
           },
         },
         HabilidadeInput: {
@@ -29,6 +45,7 @@ const options = {
           required: ["nome"],
           properties: {
             nome: { type: "string", example: "Node.js" },
+            area: { type: "string", example: "TECNOLOGIA" },
           },
         },
       },
@@ -210,6 +227,13 @@ const options = {
           summary: "Lista todas as vagas disponíveis",
           tags: ["Vagas"],
           security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: "modalidade", in: "query", schema: { type: "string" } },
+            { name: "distanciaKm", in: "query", schema: { type: "number" } },
+            { name: "curso", in: "query", schema: { type: "string" } },
+            { name: "anoConclusao", in: "query", schema: { type: "integer" } },
+            { name: "anoConclusaoAte", in: "query", schema: { type: "integer" } },
+          ],
           responses: {
             200: { description: "Lista retornada com sucesso" },
             401: { description: "Não autorizado" },
@@ -237,6 +261,13 @@ const options = {
                     },
                     latitude: { type: "number", example: -24.5505 },
                     longitude: { type: "number", example: -45.6333 },
+                    cursos_destinados: {
+                      type: "array",
+                      items: { type: "string" },
+                      example: ["Ciência da Computação", "Engenharia de Software"],
+                    },
+                    ano_conclusao_min: { type: "integer", nullable: true, example: 2026 },
+                    ano_conclusao_max: { type: "integer", nullable: true, example: 2029 },
                     habilidades: { 
                       type: "array", 
                       items: { type: "string" },
@@ -275,6 +306,12 @@ const options = {
                   properties: {
                     titulo: { type: "string" },
                     modalidade: { type: "string", enum: ["PRESENCIAL", "REMOTO", "HIBRIDO"] },
+                    cursos_destinados: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    ano_conclusao_min: { type: "integer", nullable: true },
+                    ano_conclusao_max: { type: "integer", nullable: true },
                   }
                 }
               }

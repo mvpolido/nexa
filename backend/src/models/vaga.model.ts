@@ -12,6 +12,9 @@ export interface IVaga {
   modalidade: "PRESENCIAL" | "REMOTO" | "HIBRIDO";
   latitude?: number;
   longitude?: number;
+  cursos_destinados?: string[] | null;
+  ano_conclusao_min?: number | null;
+  ano_conclusao_max?: number | null;
   ativo: number;
   criado_em: Date;
 }

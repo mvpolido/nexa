@@ -10,6 +10,10 @@ import { AlunoHabilidade } from "../entities/AlunoHabilidade";
 import { Empresa } from "../entities/Empresa";
 import { Habilidade } from "../entities/Habilidade";
 import { uploadConfig } from "../config/multer";
+import {
+  coordenadasValidas,
+  geocodificarEndereco,
+} from "../utils/geocoding";
 
 const router = Router();
 
@@ -282,6 +286,21 @@ router.post("/register", (req, res, next) => {
     const usuarioSalvo = await usuarioRepository.save(novoUsuario);
 
     if (perfil === UsuarioPerfil.ALUNO) {
+      let latitudeAluno =
+        coordenadasValidas(latitude, longitude) ? Number(latitude) : undefined;
+      let longitudeAluno =
+        coordenadasValidas(latitude, longitude) ? Number(longitude) : undefined;
+
+      if (latitudeAluno === undefined || longitudeAluno === undefined) {
+        const coordenadas = await geocodificarEndereco({
+          cep: cepLimpo,
+          endereco,
+          numero,
+        });
+        latitudeAluno = coordenadas?.latitude;
+        longitudeAluno = coordenadas?.longitude;
+      }
+
       const aluno = alunoRepository.create({
         id: usuarioSalvo.id,
         cpf: cpfLimpo,
@@ -291,8 +310,8 @@ router.post("/register", (req, res, next) => {
         cep: cepLimpo || undefined,
         endereco: endereco || undefined,
         numero: numero || undefined,
-        latitude: latitude ?? undefined,
-        longitude: longitude ?? undefined,
+        latitude: latitudeAluno,
+        longitude: longitudeAluno,
         url_curriculo: curriculoArquivo || undefined,
       });
 
@@ -338,12 +357,27 @@ router.post("/register", (req, res, next) => {
     }
 
     if (perfil === UsuarioPerfil.EMPRESA) {
+      let latitudeEmpresa =
+        coordenadasValidas(latitude, longitude) ? Number(latitude) : undefined;
+      let longitudeEmpresa =
+        coordenadasValidas(latitude, longitude) ? Number(longitude) : undefined;
+
+      if (latitudeEmpresa === undefined || longitudeEmpresa === undefined) {
+        const coordenadas = await geocodificarEndereco({
+          cep: cepLimpo,
+          endereco,
+          numero,
+        });
+        latitudeEmpresa = coordenadas?.latitude;
+        longitudeEmpresa = coordenadas?.longitude;
+      }
+
       const empresa = empresaRepository.create({
         id: usuarioSalvo.id,
         cnpj: cnpjLimpo,
         descricao: descricao || undefined,
-        latitude: latitude ?? undefined,
-        longitude: longitude ?? undefined,
+        latitude: latitudeEmpresa,
+        longitude: longitudeEmpresa,
       });
 
       await empresaRepository.save(empresa);
