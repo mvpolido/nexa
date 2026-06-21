@@ -222,6 +222,11 @@ async function runSeed() {
       "Empresa Teste",
       UsuarioPerfil.EMPRESA
     );
+    const adminUser = await getOrCreateUsuario(
+      "admin@nexa.com",
+      "Administrador Nexa",
+      UsuarioPerfil.ADMIN
+    );
 
     const aluno = await getOrCreateAluno(alunoUser);
     const empresa = await getOrCreateEmpresa(empresaUser);
@@ -286,6 +291,7 @@ async function runSeed() {
     console.log("\nCredenciais de teste:");
     console.log(`Aluno:   ${alunoUser.email} / ${TEST_PASSWORD}`);
     console.log(`Empresa: ${empresaUser.email} / ${TEST_PASSWORD}`);
+    console.log(`Admin:   ${adminUser.email} / ${TEST_PASSWORD}`);
   } catch (error) {
     console.error("Erro ao executar seed:", error);
     process.exitCode = 1;

@@ -11,7 +11,8 @@ import { Empresa } from "./Empresa";
 
 export enum UsuarioPerfil {
   ALUNO = "aluno",
-  EMPRESA = "empresa"
+  EMPRESA = "empresa",
+  ADMIN = "admin"
 }
 
 @Entity("usuario")

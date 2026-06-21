@@ -137,4 +137,39 @@ export class HabilidadeController {
       });
     }
   }
+
+  static async delete(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const habilidadeId = Number(id);
+
+      if (!Number.isInteger(habilidadeId) || habilidadeId <= 0) {
+        return res.status(400).json({
+          message: "ID de habilidade inválido.",
+        });
+      }
+
+      const repo = AppDataSource.getRepository(Habilidade);
+      const habilidade = await repo.findOne({
+        where: { id: habilidadeId },
+      });
+
+      if (!habilidade) {
+        return res.status(404).json({
+          message: "Habilidade não encontrada.",
+        });
+      }
+
+      await repo.remove(habilidade);
+
+      return res.status(200).json({
+        message: "Habilidade removida com sucesso.",
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao remover habilidade.",
+        error: error.message,
+      });
+    }
+  }
 }
