@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { Usuario, UsuarioPerfil } from "../entities/Usuario";
 import bcrypt from "bcrypt";
+import * as nodemailer from "nodemailer";
 
 export class UserController {
   // 1. ROTA PÚBLICA: Cadastro de Alunos e Empresas (Bloqueado para Admin)
@@ -154,6 +155,95 @@ export class UserController {
       return res.status(200).json({ message: "Usuário removido com sucesso" });
     } catch (error: any) {
       return res.status(500).json({ message: "Erro ao remover usuário", error: error.message });
+    }
+  }
+  // --- ROTAS DE RECUPERAÇÃO DE SENHA --- //
+
+  static async forgotPassword(req: Request, res: Response): Promise<Response> {
+    const { email } = req.body;
+    const userRepository = AppDataSource.getRepository(Usuario);
+
+    try {
+      const usuario = await userRepository.findOneBy({ email });
+
+      // Retorna a mesma mensagem sempre para não expor quais emails existem (Segurança contra enumeração)
+      if (!usuario) {
+        return res.status(200).json({ message: "Se o e-mail estiver cadastrado, um código será enviado." });
+      }
+
+      // Gera código de 6 dígitos
+      const token = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Expira em 1 hora
+      const expiracao = new Date();
+      expiracao.setHours(expiracao.getHours() + 1);
+
+      usuario.token_recuperacao = token;
+      usuario.expiracao_token_recuperacao = expiracao;
+      await userRepository.save(usuario);
+
+      // 📧 Configuração do Nodemailer (Usando Mailtrap para testes locais)
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: "naoresponda.nexa@gmail.com", // 
+          pass: "lagt nvva cwtt wpgt"       // 
+        }
+      });
+
+      await transporter.sendMail({
+        from: '"Equipe Nexa" <noreply@nexa.com.br>',
+        to: usuario.email,
+        subject: "Recuperação de Senha - Nexa",
+        text: `Seu código de recuperação é: ${token}. Ele expira em 1 hora.`,
+        html: `<p>Olá, ${usuario.nome_exibicao}!</p>
+               <p>Seu código de recuperação é: <b>${token}</b></p>
+               <p>Ele expira em 1 hora. Se você não solicitou a recuperação, ignore este e-mail.</p>`,
+      });
+
+      return res.status(200).json({ message: "Se o e-mail estiver cadastrado, um código será enviado." });
+    } catch (error: any) {
+      console.error("Erro na recuperação de senha:", error);
+      return res.status(500).json({ message: "Erro interno no servidor", error: error.message });
+    }
+  }
+  static async resetPassword(req: Request, res: Response): Promise<Response> {
+    const { email, token, novaSenha } = req.body;
+    const userRepository = AppDataSource.getRepository(Usuario);
+
+    try {
+      const usuario = await userRepository.findOneBy({ email });
+
+      // 1. Verifica se o usuário existe
+      if (!usuario) {
+        return res.status(400).json({ message: "Usuário não encontrado ou e-mail incorreto." });
+      }
+
+      // 2. Verifica se o token bate com o que está no banco
+      if (usuario.token_recuperacao !== token) {
+        return res.status(400).json({ message: "Código de recuperação inválido." });
+      }
+
+      // 3. Verifica se o token não passou da validade (1 hora)
+      const agora = new Date();
+      if (usuario.expiracao_token_recuperacao && agora > usuario.expiracao_token_recuperacao) {
+        return res.status(400).json({ message: "Este código expirou. Solicite um novo." });
+      }
+
+      // 4. Se passou em todos os testes, criptografa a nova senha
+      const hashedPassword = await bcrypt.hash(novaSenha, 10);
+
+      // 5. Atualiza a senha no banco e "limpa" os tokens para não serem usados novamente
+      usuario.senha_hash = hashedPassword;
+      usuario.token_recuperacao = null as any; 
+      usuario.expiracao_token_recuperacao = null as any;
+
+      await userRepository.save(usuario);
+
+      return res.status(200).json({ message: "Senha atualizada com sucesso!" });
+    } catch (error: any) {
+      console.error("Erro ao redefinir senha:", error);
+      return res.status(500).json({ message: "Erro interno no servidor", error: error.message });
     }
   }
 }

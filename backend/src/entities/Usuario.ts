@@ -36,6 +36,16 @@ export class Usuario {
   })
   perfil!: UsuarioPerfil;
 
+  // --- NOVAS COLUNAS PARA RECUPERAÇÃO DE SENHA --- //
+  
+  @Column({ type: "varchar", nullable: true })
+  token_recuperacao?: string;
+
+  @Column({ type: "timestamp", nullable: true })
+  expiracao_token_recuperacao?: Date;
+
+  // ----------------------------------------------- //
+
   @CreateDateColumn()
   criado_em!: Date;
 

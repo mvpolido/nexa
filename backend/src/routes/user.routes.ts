@@ -13,6 +13,8 @@ router.get("/", authMiddleware, adminMiddleware, UserController.getAll);
 router.get("/:id", authMiddleware, adminMiddleware, UserController.getById);
 router.put("/:id", authMiddleware, adminMiddleware, UserController.update);
 router.delete("/:id", authMiddleware, adminMiddleware, UserController.delete);
+router.post("/forgot-password", UserController.forgotPassword);
+router.post("/reset-password", UserController.resetPassword);
 
 // Nova rota para completar o perfil do Aluno (Upload de PDF + Skills)
 // O campo no formulário deve se chamar 'curriculo'
