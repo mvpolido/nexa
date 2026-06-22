@@ -23,6 +23,7 @@ import chatRoutes from "./routes/chat.routes"; // 👈 Importação da rota de c
 import notificacaoRoutes from './routes/notificacao.routes';
 import adminRoutes from './routes/admin.routes';
 import enderecoRoutes from './routes/endereco.routes';
+import catalogoRoutes from './routes/catalogo.routes';
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use(healthRoutes);
 app.use('/auth', authRoutes);
+app.use(catalogoRoutes);
 app.use('/users', userRoutes); 
 app.use('/vagas', vagaRoutes);
 app.use('/habilidades', habilidadeRoutes);

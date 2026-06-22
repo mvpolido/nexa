@@ -1,7 +1,9 @@
 // ignore_for_file: deprecated_member_use
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 
@@ -16,9 +18,14 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   bool isLoading = true;
   bool isSaving = false;
   bool isEditing = false;
+  bool isLoadingVerificacao = true;
+  bool isUploadingVerificacao = false;
   String? token;
 
   Map<String, dynamic>? empresaData;
+  Map<String, dynamic>? verificacaoData;
+  PlatformFile? documentoVerificacao;
+  String? documentoVerificacaoErro;
   final TextEditingController _nomeController = TextEditingController();
 
   @override
@@ -45,19 +52,165 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        if (!mounted) return;
         setState(() {
           empresaData = data;
           _nomeController.text =
               data['usuario']?['nome_exibicao'] ??
               data['usuario']?['nome'] ??
               '';
-          isLoading = false;
         });
+        await carregarVerificacao();
       } else {
         mostrarErro('Erro ao carregar perfil da empresa.');
       }
     } catch (_) {
       mostrarErro('Erro de ligação ao servidor.');
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> carregarVerificacao() async {
+    if (token == null || token!.isEmpty) return;
+
+    if (mounted) {
+      setState(() {
+        isLoadingVerificacao = true;
+      });
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/empresas/me/verificacao'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        setState(() {
+          verificacaoData = jsonDecode(response.body);
+        });
+      } else {
+        String mensagem = 'Erro ao carregar status de verificação.';
+        if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          mensagem = data['message'] ?? mensagem;
+        }
+        mostrarErro(mensagem);
+      }
+    } catch (_) {
+      mostrarErro('Erro ao consultar verificação da empresa.');
+    } finally {
+      if (mounted) setState(() => isLoadingVerificacao = false);
+    }
+  }
+
+  Future<void> selecionarDocumentoVerificacao() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      withData: true,
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final isPdf = file.extension?.toLowerCase() == 'pdf';
+    final hasBytes = file.bytes != null;
+    final isWithinLimit = file.size <= 5 * 1024 * 1024;
+
+    setState(() {
+      if (!isPdf || !hasBytes) {
+        documentoVerificacao = null;
+        documentoVerificacaoErro = 'Selecione um arquivo PDF válido.';
+      } else if (!isWithinLimit) {
+        documentoVerificacao = null;
+        documentoVerificacaoErro = 'O documento deve ter no máximo 5 MB.';
+      } else {
+        documentoVerificacao = file;
+        documentoVerificacaoErro = null;
+      }
+    });
+  }
+
+  Future<void> enviarDocumentoVerificacao({bool substituindo = false}) async {
+    final file = documentoVerificacao;
+    if (file == null || file.bytes == null) {
+      setState(() {
+        documentoVerificacaoErro = 'Selecione um PDF antes de enviar.';
+      });
+      return;
+    }
+
+    if (substituindo) {
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Substituir documento'),
+          content: const Text(
+            'Deseja substituir o documento enviado anteriormente?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Substituir'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmar != true) return;
+    }
+
+    setState(() => isUploadingVerificacao = true);
+
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiConfig.baseUrl}/empresas/me/solicitar-verificacao'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'documento',
+          file.bytes!,
+          filename: file.name,
+          contentType: MediaType('application', 'pdf'),
+        ),
+      );
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Documento enviado para análise.')),
+        );
+        setState(() {
+          documentoVerificacao = null;
+          documentoVerificacaoErro = null;
+        });
+        await carregarVerificacao();
+      } else {
+        String mensagem = 'Erro ao enviar documento.';
+        if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          mensagem = data['message'] ?? mensagem;
+        }
+        mostrarErro(mensagem);
+      }
+    } catch (_) {
+      mostrarErro('Erro de conexão ao enviar documento.');
+    } finally {
+      if (mounted) setState(() => isUploadingVerificacao = false);
     }
   }
 
@@ -157,6 +310,53 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   String formatarCNPJ(String cnpj) {
     if (cnpj.length != 14) return cnpj;
     return '${cnpj.substring(0, 2)}.${cnpj.substring(2, 5)}.${cnpj.substring(5, 8)}/${cnpj.substring(8, 12)}-${cnpj.substring(12, 14)}';
+  }
+
+  String _statusVerificacaoLabel(String? status) {
+    switch (status) {
+      case 'pendente':
+        return 'Em análise';
+      case 'aprovada':
+        return 'Verificada';
+      case 'rejeitada':
+        return 'Solicitação rejeitada';
+      case 'nao_solicitada':
+      default:
+        return 'Não solicitada';
+    }
+  }
+
+  IconData _statusVerificacaoIcon(String? status) {
+    switch (status) {
+      case 'pendente':
+        return Icons.schedule;
+      case 'aprovada':
+        return Icons.verified;
+      case 'rejeitada':
+        return Icons.error_outline;
+      default:
+        return Icons.verified_user_outlined;
+    }
+  }
+
+  Color _statusVerificacaoColor(String? status) {
+    switch (status) {
+      case 'pendente':
+        return Colors.orange;
+      case 'aprovada':
+        return Colors.blue;
+      case 'rejeitada':
+        return Colors.red;
+      default:
+        return const Color(0xFF7C3AED);
+    }
+  }
+
+  Widget _verifiedIcon({double size = 22}) {
+    return Tooltip(
+      message: 'Empresa verificada',
+      child: Icon(Icons.verified, color: Colors.blue, size: size),
+    );
   }
 
   Widget _buildEstatistica(String titulo, String valor, IconData icone) {
@@ -343,10 +543,13 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                             color: Colors.blue,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            Icons.verified,
-                            color: Colors.white,
-                            size: 20,
+                          child: const Tooltip(
+                            message: 'Empresa verificada',
+                            child: Icon(
+                              Icons.verified,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           ),
                         ),
                     ],
@@ -403,11 +606,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                         ),
                         if (isVerificada) ...[
                           const SizedBox(width: 8),
-                          const Icon(
-                            Icons.verified,
-                            color: Colors.blue,
-                            size: 22,
-                          ),
+                          _verifiedIcon(),
                         ],
                       ],
                     ),
@@ -449,6 +648,9 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                 ],
               ),
             ),
+
+            const SizedBox(height: 12),
+            _buildSecaoVerificacaoEmpresa(isVerificada),
 
             const SizedBox(height: 12),
             Container(
@@ -571,6 +773,152 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
             const SizedBox(height: 40),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSecaoVerificacaoEmpresa(bool isVerificada) {
+    final status =
+        verificacaoData?['status_verificacao']?.toString() ??
+        (isVerificada ? 'aprovada' : 'nao_solicitada');
+    final documentoEnviado = verificacaoData?['documento_enviado'] == true;
+    final nomeDocumento = verificacaoData?['documento_nome_original'];
+    final motivo = verificacaoData?['motivo_rejeicao'];
+    final color = _statusVerificacaoColor(status);
+    final podeEnviar = status == 'nao_solicitada' || status == 'rejeitada';
+    final podeSubstituir = status == 'pendente';
+
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Verificação da empresa',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1F2937),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (isLoadingVerificacao)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+              ),
+            )
+          else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(_statusVerificacaoIcon(status), color: color, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _statusVerificacaoLabel(status),
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (status == 'nao_solicitada')
+                        const Text(
+                          'Envie um documento em PDF que comprove a existência da empresa para análise do moderador.',
+                          style: TextStyle(color: Color(0xFF6B7280)),
+                        )
+                      else if (status == 'pendente') ...[
+                        const Text(
+                          'Solicitação em análise. Nossa equipe avaliará o documento enviado.',
+                          style: TextStyle(color: Color(0xFF6B7280)),
+                        ),
+                        if (nomeDocumento != null)
+                          Text(
+                            'Documento: $nomeDocumento',
+                            style: const TextStyle(color: Color(0xFF6B7280)),
+                          ),
+                      ] else if (status == 'aprovada')
+                        const Text(
+                          'Empresa verificada. Novos envios não são necessários.',
+                          style: TextStyle(color: Color(0xFF6B7280)),
+                        )
+                      else if (status == 'rejeitada') ...[
+                        if (motivo != null)
+                          Text(
+                            'Motivo: $motivo',
+                            style: const TextStyle(color: Color(0xFF6B7280)),
+                          ),
+                        const Text(
+                          'Você pode enviar outro PDF para uma nova análise.',
+                          style: TextStyle(color: Color(0xFF6B7280)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if ((podeEnviar || podeSubstituir) && !isVerificada) ...[
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: isUploadingVerificacao
+                    ? null
+                    : selecionarDocumentoVerificacao,
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                label: const Text('Selecionar PDF'),
+              ),
+              if (documentoVerificacao != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  documentoVerificacao!.name,
+                  style: const TextStyle(color: Color(0xFF374151)),
+                ),
+              ],
+              if (documentoVerificacaoErro != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  documentoVerificacaoErro!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ],
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed:
+                      isUploadingVerificacao || documentoVerificacao == null
+                      ? null
+                      : () => enviarDocumentoVerificacao(
+                          substituindo: podeSubstituir && documentoEnviado,
+                        ),
+                  icon: isUploadingVerificacao
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.upload_file),
+                  label: Text(
+                    podeSubstituir
+                        ? 'Enviar substituição'
+                        : 'Enviar para análise',
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
       ),
     );
   }

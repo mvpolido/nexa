@@ -5,6 +5,7 @@ class Vaga {
   final String? requisitos;
   final String modalidade;
   final String empresaNome;
+  final bool empresaVerificada;
   final List<String> cursosDestinados;
   final int? anoConclusaoMin;
   final int? anoConclusaoMax;
@@ -16,6 +17,7 @@ class Vaga {
     this.requisitos,
     required this.modalidade,
     required this.empresaNome,
+    this.empresaVerificada = false,
     this.cursosDestinados = const [],
     this.anoConclusaoMin,
     this.anoConclusaoMax,
@@ -36,8 +38,13 @@ class Vaga {
       modalidade: json['modalidade'],
       // Note que no seu Controller enviamos a relação 'empresa'
       empresaNome: json['empresa'] != null
-          ? json['empresa']['nome_fantasia']
+          ? (json['empresa']['usuario']?['nome_exibicao'] ??
+                json['empresa']['nome_fantasia'] ??
+                'Empresa não identificada')
           : 'Empresa não identificada',
+      empresaVerificada:
+          json['empresa']?['verificada'] == true ||
+          json['empresa']?['verificada'] == 1,
       cursosDestinados: cursos,
       anoConclusaoMin: _intFromJson(
         json['ano_conclusao_min'] ?? json['anoConclusaoMin'],

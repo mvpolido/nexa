@@ -38,10 +38,10 @@ export class Usuario {
 
   // --- NOVAS COLUNAS PARA RECUPERAÇÃO DE SENHA --- //
   
-  @Column({ type: "varchar", nullable: true })
+  @Column({ type: "varchar", nullable: true, select: false })
   token_recuperacao?: string;
 
-  @Column({ type: "timestamp", nullable: true })
+  @Column({ type: "timestamp", nullable: true, select: false })
   expiracao_token_recuperacao?: Date;
 
   // ----------------------------------------------- //

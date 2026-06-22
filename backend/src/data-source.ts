@@ -11,6 +11,8 @@ import { Avaliacao } from "./entities/Avaliacao";
 import { AlunoHabilidade } from "./entities/AlunoHabilidade";
 import { VagaHabilidade } from "./entities/VagaHabilidade";
 import { Notificacao } from "./entities/Notificacao";
+import { Curso } from "./entities/Curso";
+import { InstituicaoEnsino } from "./entities/InstituicaoEnsino";
 
 export const AppDataSource = new DataSource({
     type: "postgres",
@@ -33,7 +35,9 @@ export const AppDataSource = new DataSource({
       Avaliacao, 
       AlunoHabilidade, 
       VagaHabilidade,
-      Notificacao
+      Notificacao,
+      Curso,
+      InstituicaoEnsino
     ],
     migrations: [],
     subscribers: [],

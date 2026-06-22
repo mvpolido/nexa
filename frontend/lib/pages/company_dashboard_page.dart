@@ -28,6 +28,8 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   List<dynamic> vagas = [];
   List<dynamic> habilidadesDisponiveis = [];
+  bool carregandoHabilidades = false;
+  String? erroHabilidades;
   Map<String, dynamic> resumoDashboard = {
     'vagasAtivas': 0,
     'vagasArquivadas': 0,
@@ -79,21 +81,77 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     return vagas.where((vaga) => vagaArquivada(vaga)).toList();
   }
 
-  Future<void> carregarHabilidades() async {
+  Future<void> carregarHabilidades({bool force = false}) async {
+    if (carregandoHabilidades) return;
+    if (!force && habilidadesDisponiveis.isNotEmpty) return;
+
+    if (mounted) {
+      setState(() {
+        carregandoHabilidades = true;
+        erroHabilidades = null;
+      });
+    }
+
     try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/habilidades');
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/habilidades'),
+        uri,
         headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final lista = _extrairListaHabilidades(data);
 
-        if (data is List) {
-          habilidadesDisponiveis = data;
+        if (lista != null) {
+          if (!mounted) return;
+          setState(() {
+            habilidadesDisponiveis = lista;
+            erroHabilidades = null;
+          });
+          return;
         }
       }
-    } catch (_) {}
+
+      debugPrint(
+        'Falha ao carregar habilidades: GET ${response.request?.url} -> ${response.statusCode} ${response.body}',
+      );
+      if (!mounted) return;
+      setState(() {
+        erroHabilidades = 'Não foi possível carregar as habilidades.';
+        habilidadesDisponiveis = [];
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(erroHabilidades!)));
+    } catch (error) {
+      debugPrint(
+        'Falha ao carregar habilidades: GET ${ApiConfig.baseUrl}/habilidades -> $error',
+      );
+      if (!mounted) return;
+      setState(() {
+        erroHabilidades = 'Erro de conexão ao carregar habilidades.';
+        habilidadesDisponiveis = [];
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(erroHabilidades!)));
+    } finally {
+      if (mounted) {
+        setState(() => carregandoHabilidades = false);
+      }
+    }
+  }
+
+  List<dynamic>? _extrairListaHabilidades(dynamic data) {
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in ['habilidades', 'data', 'items', 'results']) {
+        final value = data[key];
+        if (value is List) return value;
+      }
+    }
+    return null;
   }
 
   Future<void> carregarVagas() async {
@@ -776,16 +834,61 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        SkillSelector(
-                          title: 'Habilidades exigidas pela vaga',
-                          habilidades: habilidadesDisponiveis,
-                          selectedIds: habilidadeIdsSelecionadas,
-                          onChanged: (updated) {
-                            setDialogState(() {
-                              habilidadeIdsSelecionadas = updated;
-                            });
-                          },
-                        ),
+                        if (carregandoHabilidades)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: LinearProgressIndicator(
+                              color: Color(0xFF7C3AED),
+                            ),
+                          )
+                        else if (erroHabilidades != null)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFFECACA),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  erroHabilidades!,
+                                  style: const TextStyle(
+                                    color: Color(0xFF991B1B),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: () async {
+                                    await carregarHabilidades(force: true);
+                                    if (context.mounted) {
+                                      setDialogState(() {});
+                                    }
+                                  },
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('Tentar novamente'),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          SkillSelector(
+                            title: 'Habilidades exigidas',
+                            habilidades: habilidadesDisponiveis,
+                            selectedIds: habilidadeIdsSelecionadas,
+                            searchHint: 'Buscar habilidade',
+                            maxListHeight: 280,
+                            onChanged: (updated) {
+                              setDialogState(() {
+                                habilidadeIdsSelecionadas = updated;
+                              });
+                            },
+                          ),
                       ],
                     ),
                   ),
@@ -1537,8 +1640,13 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   Set<int> habilidadeIdsDaVaga(dynamic vaga) {
     return habilidadesDaVaga(vaga)
-        .where((habilidade) => habilidade['id'] is int)
-        .map<int>((habilidade) => habilidade['id'] as int)
+        .map<int?>((habilidade) {
+          final id = habilidade['id'];
+          if (id is int) return id;
+          if (id is String) return int.tryParse(id);
+          return null;
+        })
+        .whereType<int>()
         .toSet();
   }
 

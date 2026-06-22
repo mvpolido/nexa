@@ -4,6 +4,47 @@ import { Usuario, UsuarioPerfil } from "../entities/Usuario";
 import bcrypt from "bcrypt";
 import * as nodemailer from "nodemailer";
 
+function usuarioSeguro(usuario: Usuario) {
+  const {
+    senha_hash: _senhaHash,
+    token_recuperacao: _tokenRecuperacao,
+    expiracao_token_recuperacao: _expiracaoTokenRecuperacao,
+    ...seguro
+  } = usuario as any;
+
+  return seguro;
+}
+
+function getSmtpConfig() {
+  const required = [
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_SECURE",
+    "SMTP_USER",
+    "SMTP_PASS",
+    "SMTP_FROM",
+  ];
+  const missing = required.filter((key) => !process.env[key]);
+
+  if (missing.length > 0) {
+    return { missing, config: null };
+  }
+
+  return {
+    missing,
+    config: {
+      host: process.env.SMTP_HOST!,
+      port: Number(process.env.SMTP_PORT),
+      secure: process.env.SMTP_SECURE === "true",
+      auth: {
+        user: process.env.SMTP_USER!,
+        pass: process.env.SMTP_PASS!,
+      },
+      from: process.env.SMTP_FROM!,
+    },
+  };
+}
+
 export class UserController {
   // 1. ROTA PÚBLICA: Cadastro de Alunos e Empresas (Bloqueado para Admin)
   static async create(req: Request, res: Response): Promise<Response> {
@@ -38,8 +79,7 @@ export class UserController {
 
       await userRepository.save(newUser);
       
-      const { senha_hash: _, ...usuarioSemSenha } = newUser;
-      return res.status(201).json(usuarioSemSenha);
+      return res.status(201).json(usuarioSeguro(newUser));
     } catch (error: any) {
       return res.status(500).json({ message: "Erro ao criar usuário", error: error.message });
     }
@@ -71,10 +111,9 @@ export class UserController {
 
       await userRepository.save(newAdmin);
       
-      const { senha_hash: _, ...usuarioSemSenha } = newAdmin;
       return res.status(201).json({
         message: "Novo administrador criado com sucesso!",
-        user: usuarioSemSenha
+        user: usuarioSeguro(newAdmin)
       });
     } catch (error: any) {
       return res.status(500).json({ message: "Erro ao criar administrador", error: error.message });
@@ -88,7 +127,7 @@ export class UserController {
         order: { criado_em: "DESC" },
       });
 
-      return res.status(200).json(usuarios);
+      return res.status(200).json(usuarios.map(usuarioSeguro));
     } catch (error: any) {
       return res.status(500).json({ message: "Erro ao listar usuários", error: error.message });
     }
@@ -104,7 +143,7 @@ export class UserController {
         return res.status(404).json({ message: "Usuário não encontrado" });
       }
 
-      return res.status(200).json(usuario);
+      return res.status(200).json(usuarioSeguro(usuario));
     } catch (error: any) {
       return res.status(500).json({ message: "Erro ao buscar usuário", error: error.message });
     }
@@ -134,7 +173,7 @@ export class UserController {
       }
 
       const usuarioAtualizado = await userRepository.save(usuario);
-      return res.status(200).json(usuarioAtualizado);
+      return res.status(200).json(usuarioSeguro(usuarioAtualizado));
     } catch (error: any) {
       return res.status(500).json({ message: "Erro ao atualizar usuário", error: error.message });
     }
@@ -171,6 +210,16 @@ export class UserController {
         return res.status(200).json({ message: "Se o e-mail estiver cadastrado, um código será enviado." });
       }
 
+      const smtp = getSmtpConfig();
+      if (!smtp.config) {
+        console.error(
+          `Configuração SMTP ausente para recuperação de senha. Variáveis faltando: ${smtp.missing.join(", ")}`
+        );
+        return res.status(500).json({
+          message: "Serviço de recuperação de senha indisponível no momento.",
+        });
+      }
+
       // Gera código de 6 dígitos
       const token = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -182,17 +231,15 @@ export class UserController {
       usuario.expiracao_token_recuperacao = expiracao;
       await userRepository.save(usuario);
 
-      // 📧 Configuração do Nodemailer (Usando Mailtrap para testes locais)
       const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: "naoresponda.nexa@gmail.com", // 
-          pass: "lagt nvva cwtt wpgt"       // 
-        }
+        host: smtp.config.host,
+        port: smtp.config.port,
+        secure: smtp.config.secure,
+        auth: smtp.config.auth,
       });
 
       await transporter.sendMail({
-        from: '"Equipe Nexa" <noreply@nexa.com.br>',
+        from: smtp.config.from,
         to: usuario.email,
         subject: "Recuperação de Senha - Nexa",
         text: `Seu código de recuperação é: ${token}. Ele expira em 1 hora.`,
@@ -203,8 +250,8 @@ export class UserController {
 
       return res.status(200).json({ message: "Se o e-mail estiver cadastrado, um código será enviado." });
     } catch (error: any) {
-      console.error("Erro na recuperação de senha:", error);
-      return res.status(500).json({ message: "Erro interno no servidor", error: error.message });
+      console.error("Erro na recuperação de senha:", error?.message || error);
+      return res.status(500).json({ message: "Erro interno no servidor" });
     }
   }
   static async resetPassword(req: Request, res: Response): Promise<Response> {
@@ -212,7 +259,12 @@ export class UserController {
     const userRepository = AppDataSource.getRepository(Usuario);
 
     try {
-      const usuario = await userRepository.findOneBy({ email });
+      const usuario = await userRepository
+        .createQueryBuilder("usuario")
+        .addSelect("usuario.token_recuperacao")
+        .addSelect("usuario.expiracao_token_recuperacao")
+        .where("usuario.email = :email", { email })
+        .getOne();
 
       // 1. Verifica se o usuário existe
       if (!usuario) {
@@ -242,8 +294,8 @@ export class UserController {
 
       return res.status(200).json({ message: "Senha atualizada com sucesso!" });
     } catch (error: any) {
-      console.error("Erro ao redefinir senha:", error);
-      return res.status(500).json({ message: "Erro interno no servidor", error: error.message });
+      console.error("Erro ao redefinir senha:", error?.message || error);
+      return res.status(500).json({ message: "Erro interno no servidor" });
     }
   }
 }

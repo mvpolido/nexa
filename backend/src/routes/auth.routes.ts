@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
 import { Router } from "express";
 import bcrypt from "bcrypt";
-import { In } from "typeorm";
 import { cpf as cpfValidator, cnpj as cnpjValidator } from "cpf-cnpj-validator";
 import { AppDataSource } from "../data-source";
 import { Usuario, UsuarioPerfil } from "../entities/Usuario";
@@ -10,10 +9,14 @@ import { AlunoHabilidade } from "../entities/AlunoHabilidade";
 import { Empresa } from "../entities/Empresa";
 import { Habilidade } from "../entities/Habilidade";
 import { uploadConfig } from "../config/multer";
+import { geocodificarEndereco } from "../utils/geocoding";
+import { calcularDistanciaKm, coordenadasValidas } from "../utils/distance";
 import {
-  coordenadasValidas,
-  geocodificarEndereco,
-} from "../utils/geocoding";
+  mensagemAnoConclusaoInvalido,
+  parseAnoConclusao,
+} from "../utils/anoConclusao";
+import { getJwtSecret } from "../utils/jwtSecret";
+import { catalogoAtivoExiste } from "../controllers/CatalogoController";
 
 const router = Router();
 
@@ -21,115 +24,67 @@ function onlyNumbers(value: string | undefined): string {
   return (value || "").replace(/\D/g, "");
 }
 
-function parseArrayField(value: any): any[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== "string" || !value.trim()) return [];
+function alertarCoordenadasEnviadasSuspeitas(
+  origem: string,
+  latitudeEnviada: unknown,
+  longitudeEnviada: unknown,
+  latitudeConfirmada: number,
+  longitudeConfirmada: number
+) {
+  if (!coordenadasValidas(latitudeEnviada, longitudeEnviada)) return;
 
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+  const diferencaKm = calcularDistanciaKm(
+    latitudeEnviada,
+    longitudeEnviada,
+    latitudeConfirmada,
+    longitudeConfirmada
+  );
+
+  if (diferencaKm !== null && diferencaKm > 5) {
+    console.warn(
+      `${origem}: coordenadas enviadas pelo cliente divergem da geocodificação em ${diferencaKm.toFixed(
+        1
+      )} km. Valor enviado ignorado.`
+    );
   }
 }
 
-const CURSOS_PERMITIDOS = [
-  "Administração",
-  "Agronomia",
-  "Análise e Desenvolvimento de Sistemas",
-  "Arquitetura e Urbanismo",
-  "Biomedicina",
-  "Ciência da Computação",
-  "Ciências Biológicas",
-  "Ciências Contábeis",
-  "Comunicação Social",
-  "Design",
-  "Design Gráfico",
-  "Direito",
-  "Economia",
-  "Educação Física",
-  "Enfermagem",
-  "Engenharia Ambiental",
-  "Engenharia Civil",
-  "Engenharia da Computação",
-  "Engenharia de Alimentos",
-  "Engenharia de Controle e Automação",
-  "Engenharia de Produção",
-  "Engenharia de Software",
-  "Engenharia Elétrica",
-  "Engenharia Eletrônica",
-  "Engenharia Mecânica",
-  "Engenharia Química",
-  "Farmácia",
-  "Física",
-  "Fisioterapia",
-  "Gestão da Tecnologia da Informação",
-  "Jornalismo",
-  "Letras",
-  "Logística",
-  "Marketing",
-  "Matemática",
-  "Medicina Veterinária",
-  "Nutrição",
-  "Pedagogia",
-  "Psicologia",
-  "Publicidade e Propaganda",
-  "Química",
-  "Recursos Humanos",
-  "Relações Internacionais",
-  "Sistemas de Informação",
-  "Técnico em Administração",
-  "Técnico em Desenvolvimento de Sistemas",
-  "Técnico em Edificações",
-  "Técnico em Eletrotécnica",
-  "Técnico em Informática",
-  "Técnico em Mecânica",
-  "Técnico em Química",
-];
+function parseIdArrayField(value: any): { ids: number[]; invalid: boolean } {
+  if (value === undefined || value === null || value === "") {
+    return { ids: [], invalid: false };
+  }
 
-const INSTITUICOES_PERMITIDAS = [
-  "UTFPR - Universidade Tecnológica Federal do Paraná",
-  "IFPR - Instituto Federal do Paraná",
-  "UFPR - Universidade Federal do Paraná",
-  "UEM - Universidade Estadual de Maringá",
-  "UEL - Universidade Estadual de Londrina",
-  "UEPG - Universidade Estadual de Ponta Grossa",
-  "UNESPAR - Universidade Estadual do Paraná",
-  "UNICENTRO - Universidade Estadual do Centro-Oeste",
-  "PUCPR - Pontifícia Universidade Católica do Paraná",
-  "UniCesumar",
-  "Uningá",
-  "Unicesumar",
-  "Unipar",
-  "Universidade Positivo",
-  "Universidade Tuiuti do Paraná",
-  "FAG",
-  "Univel",
-  "Unioeste - Universidade Estadual do Oeste do Paraná",
-  "Campo Real",
-  "FAE Centro Universitário",
-  "Estácio",
-  "Anhanguera",
-  "Unopar",
-  "UniBrasil",
-  "UniDomBosco",
-  "SENAI",
-  "SENAC",
-  "Fatec",
-  "ETEC",
-  "IFSP - Instituto Federal de São Paulo",
-  "USP - Universidade de São Paulo",
-  "UNESP - Universidade Estadual Paulista",
-  "UNICAMP - Universidade Estadual de Campinas",
-  "UFSCar - Universidade Federal de São Carlos",
-  "UFMG - Universidade Federal de Minas Gerais",
-  "UFSC - Universidade Federal de Santa Catarina",
-  "UFRGS - Universidade Federal do Rio Grande do Sul",
-  "UFSM - Universidade Federal de Santa Maria",
-];
+  let parsed = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return { ids: [], invalid: true };
+    }
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { ids: [], invalid: true };
+  }
+
+  const ids: number[] = [];
+  for (const item of parsed) {
+    if (
+      (typeof item !== "number" && typeof item !== "string") ||
+      !/^\d+$/.test(String(item).trim())
+    ) {
+      return { ids: [], invalid: true };
+    }
+
+    const id = Number(item);
+    if (!Number.isInteger(id) || id <= 0) {
+      return { ids: [], invalid: true };
+    }
+    ids.push(id);
+  }
+
+  return { ids: Array.from(new Set(ids)), invalid: false };
+}
 
 router.post("/register", (req, res, next) => {
   uploadConfig.single("curriculo")(req, res, (error: any) => {
@@ -158,9 +113,7 @@ router.post("/register", (req, res, next) => {
       cep,
       endereco,
       numero,
-      habilidades,
       habilidadeIds,
-      skills,
     } = req.body;
 
     const senha = req.body.senha ?? req.body.password;
@@ -181,8 +134,6 @@ router.post("/register", (req, res, next) => {
     const alunoRepository = AppDataSource.getRepository(Aluno);
     const empresaRepository = AppDataSource.getRepository(Empresa);
     const habilidadeRepository = AppDataSource.getRepository(Habilidade);
-    const alunoHabilidadeRepository =
-      AppDataSource.getRepository(AlunoHabilidade);
 
     const usuarioExistente = await usuarioRepository.findOne({
       where: { email },
@@ -215,13 +166,13 @@ router.post("/register", (req, res, next) => {
         });
       }
 
-      if (!CURSOS_PERMITIDOS.includes(cursoNormalizado)) {
+      if (!(await catalogoAtivoExiste("curso", cursoNormalizado))) {
         return res.status(400).json({
           message: "Curso inválido. Selecione uma opção da lista.",
         });
       }
 
-      if (!INSTITUICOES_PERMITIDAS.includes(instituicaoNormalizada)) {
+      if (!(await catalogoAtivoExiste("instituicao", instituicaoNormalizada))) {
         return res.status(400).json({
           message: "Instituição inválida. Selecione uma opção da lista.",
         });
@@ -241,6 +192,33 @@ router.post("/register", (req, res, next) => {
         return res.status(409).json({
           message: "CPF já cadastrado",
         });
+      }
+
+      const anoConclusaoValidado = parseAnoConclusao(ano_conclusao);
+      if (anoConclusaoValidado === null) {
+        return res.status(400).json({
+          message: mensagemAnoConclusaoInvalido(),
+        });
+      }
+
+      const habilidadeIdsParsed = parseIdArrayField(habilidadeIds);
+      if (habilidadeIdsParsed.invalid) {
+        return res.status(400).json({
+          message: "O campo habilidadeIds deve ser um array JSON de IDs inteiros positivos.",
+        });
+      }
+
+      if (habilidadeIdsParsed.ids.length > 0) {
+        const habilidadesEncontradas = await habilidadeRepository
+          .createQueryBuilder("habilidade")
+          .where("habilidade.id IN (:...ids)", { ids: habilidadeIdsParsed.ids })
+          .getMany();
+
+        if (habilidadesEncontradas.length !== habilidadeIdsParsed.ids.length) {
+          return res.status(400).json({
+            message: "Uma ou mais habilidades informadas não existem.",
+          });
+        }
       }
     }
 
@@ -275,88 +253,75 @@ router.post("/register", (req, res, next) => {
     }
 
     const senhaHash = await bcrypt.hash(senha, 10);
-
-    const novoUsuario = usuarioRepository.create({
-      nome_exibicao,
-      email,
-      senha_hash: senhaHash,
-      perfil,
-    });
-
-    const usuarioSalvo = await usuarioRepository.save(novoUsuario);
+    let usuarioSalvo: Usuario;
 
     if (perfil === UsuarioPerfil.ALUNO) {
-      let latitudeAluno =
-        coordenadasValidas(latitude, longitude) ? Number(latitude) : undefined;
-      let longitudeAluno =
-        coordenadasValidas(latitude, longitude) ? Number(longitude) : undefined;
+      const coordenadasAluno = await geocodificarEndereco({
+        cep: cepLimpo,
+        endereco,
+        numero,
+      });
+      const latitudeAluno = coordenadasAluno?.latitude;
+      const longitudeAluno = coordenadasAluno?.longitude;
 
-      if (latitudeAluno === undefined || longitudeAluno === undefined) {
-        const coordenadas = await geocodificarEndereco({
-          cep: cepLimpo,
-          endereco,
-          numero,
+      if (!coordenadasValidas(latitudeAluno, longitudeAluno)) {
+        return res.status(422).json({
+          message:
+            "Não foi possível localizar o endereço do aluno. Confira CEP, endereço e número.",
         });
-        latitudeAluno = coordenadas?.latitude;
-        longitudeAluno = coordenadas?.longitude;
       }
 
-      const aluno = alunoRepository.create({
-        id: usuarioSalvo.id,
-        cpf: cpfLimpo,
-        curso: cursoNormalizado || undefined,
-        instituicao: instituicaoNormalizada || undefined,
-        ano_conclusao: ano_conclusao || undefined,
-        cep: cepLimpo || undefined,
-        endereco: endereco || undefined,
-        numero: numero || undefined,
-        latitude: latitudeAluno,
-        longitude: longitudeAluno,
-        url_curriculo: curriculoArquivo || undefined,
-      });
-
-      await alunoRepository.save(aluno);
-
-      const habilidadesRecebidas = [
-        ...parseArrayField(habilidadeIds),
-        ...parseArrayField(habilidades),
-        ...parseArrayField(skills),
-      ];
-      const idsRecebidos = habilidadesRecebidas
-        .map((item) => Number(item))
-        .filter((item) => Number.isInteger(item) && item > 0);
-      const nomesRecebidos = habilidadesRecebidas
-        .filter((item) => typeof item === "string" && Number.isNaN(Number(item)))
-        .map((item) => item.trim())
-        .filter(Boolean);
-
-      const habilidadesPorId = idsRecebidos.length
-        ? await habilidadeRepository.find({ where: { id: In(idsRecebidos) } })
-        : [];
-      const habilidadesPorNome = nomesRecebidos.length
-        ? await habilidadeRepository.find({ where: { nome: In(nomesRecebidos) } })
-        : [];
-      const habilidadeIdsUnicos = Array.from(
-        new Set(
-          [...habilidadesPorId, ...habilidadesPorNome].map(
-            (habilidade) => habilidade.id
-          )
-        )
+      alertarCoordenadasEnviadasSuspeitas(
+        "Cadastro de aluno",
+        latitude,
+        longitude,
+        Number(latitudeAluno),
+        Number(longitudeAluno)
       );
 
-      if (habilidadeIdsUnicos.length > 0) {
-        await alunoHabilidadeRepository.save(
-          habilidadeIdsUnicos.map((habilidadeId) =>
-            alunoHabilidadeRepository.create({
-              aluno_id: aluno.id,
-              habilidade_id: habilidadeId,
-            })
-          )
-        );
-      }
-    }
+      const anoConclusaoValidado = parseAnoConclusao(ano_conclusao);
+      const habilidadeIdsUnicos = parseIdArrayField(habilidadeIds).ids;
 
-    if (perfil === UsuarioPerfil.EMPRESA) {
+      usuarioSalvo = await AppDataSource.transaction(async (manager) => {
+        const novoUsuario = manager.create(Usuario, {
+          nome_exibicao,
+          email,
+          senha_hash: senhaHash,
+          perfil,
+        });
+        const usuarioCriado = await manager.save(Usuario, novoUsuario);
+
+        const aluno = manager.create(Aluno, {
+          id: usuarioCriado.id,
+          cpf: cpfLimpo,
+          curso: cursoNormalizado || undefined,
+          instituicao: instituicaoNormalizada || undefined,
+          ano_conclusao: anoConclusaoValidado || undefined,
+          cep: cepLimpo || undefined,
+          endereco: endereco || undefined,
+          numero: numero || undefined,
+          latitude: Number(latitudeAluno),
+          longitude: Number(longitudeAluno),
+          url_curriculo: curriculoArquivo || undefined,
+        });
+
+        await manager.save(Aluno, aluno);
+
+        if (habilidadeIdsUnicos.length > 0) {
+          await manager.save(
+            AlunoHabilidade,
+            habilidadeIdsUnicos.map((habilidadeId) =>
+              manager.create(AlunoHabilidade, {
+                aluno_id: aluno.id,
+                habilidade_id: habilidadeId,
+              })
+            )
+          );
+        }
+
+        return usuarioCriado;
+      });
+    } else {
       let latitudeEmpresa =
         coordenadasValidas(latitude, longitude) ? Number(latitude) : undefined;
       let longitudeEmpresa =
@@ -372,25 +337,35 @@ router.post("/register", (req, res, next) => {
         longitudeEmpresa = coordenadas?.longitude;
       }
 
-      const empresa = empresaRepository.create({
-        id: usuarioSalvo.id,
-        cnpj: cnpjLimpo,
-        descricao: descricao || undefined,
-        latitude: latitudeEmpresa,
-        longitude: longitudeEmpresa,
-      });
+      usuarioSalvo = await AppDataSource.transaction(async (manager) => {
+        const novoUsuario = manager.create(Usuario, {
+          nome_exibicao,
+          email,
+          senha_hash: senhaHash,
+          perfil,
+        });
+        const usuarioCriado = await manager.save(Usuario, novoUsuario);
 
-      await empresaRepository.save(empresa);
+        const empresa = manager.create(Empresa, {
+          id: usuarioCriado.id,
+          cnpj: cnpjLimpo,
+          descricao: descricao || undefined,
+          latitude: latitudeEmpresa,
+          longitude: longitudeEmpresa,
+        });
+
+        await manager.save(Empresa, empresa);
+        return usuarioCriado;
+      });
     }
 
-    const secret = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
     const token = jwt.sign(
       {
         id: usuarioSalvo.id,
         userId: usuarioSalvo.id,
         perfil: usuarioSalvo.perfil,
       },
-      secret,
+      getJwtSecret(),
       { expiresIn: "1d" }
     );
 
@@ -444,15 +419,13 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const secret = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
-
     const token = jwt.sign(
       {
         id: usuario.id,
         userId: usuario.id,
         perfil: usuario.perfil,
       },
-      secret,
+      getJwtSecret(),
       { expiresIn: "1d" }
     );
 

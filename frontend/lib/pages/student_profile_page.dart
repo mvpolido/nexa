@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
+import '../services/catalog_service.dart';
 import '../widgets/skill_selector.dart';
 
 class StudentProfilePage extends StatefulWidget {
@@ -21,7 +22,9 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   bool _isEditing = false;
   bool _isSaving = false;
   bool _isUploadingCurriculo = false;
+  bool _isLoadingCatalogos = false;
   String? _token;
+  String? _catalogosError;
 
   // Controladores de Texto
   final _nomeController = TextEditingController();
@@ -34,6 +37,12 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   final _instituicaoController = TextEditingController();
   final _cursoController = TextEditingController();
   final _anoController = TextEditingController();
+  final _skillsSearchController = TextEditingController();
+  final _instituicaoFocusNode = FocusNode();
+  final _cursoFocusNode = FocusNode();
+  int? _selectedAnoConclusao;
+  String? _instituicaoOriginal;
+  String? _cursoOriginal;
 
   double? _latitude;
   double? _longitude;
@@ -42,12 +51,96 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   String? _enderecoOriginal;
 
   List<dynamic> _habilidadesDisponiveis = [];
+  List<String> _instituicoesDisponiveis = [];
+  List<String> _cursosDisponiveis = [];
   Set<int> _habilidadesSelecionadas = {};
+  final _catalogService = CatalogService();
 
   @override
   void initState() {
     super.initState();
+    _skillsSearchController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _carregarPerfil();
+  }
+
+  @override
+  void dispose() {
+    _nomeController.dispose();
+    _emailController.dispose();
+    _cpfController.dispose();
+    _cepController.dispose();
+    _enderecoController.dispose();
+    _instituicaoController.dispose();
+    _cursoController.dispose();
+    _instituicaoFocusNode.dispose();
+    _cursoFocusNode.dispose();
+    _anoController.dispose();
+    _skillsSearchController.dispose();
+    super.dispose();
+  }
+
+  List<int> get _anosConclusaoValidos {
+    final maxYear = DateTime.now().year + 10;
+    return List<int>.generate(maxYear - 2020 + 1, (index) => 2020 + index);
+  }
+
+  String get _anoConclusaoMensagemErro {
+    return 'Selecione um ano entre 2020 e ${DateTime.now().year + 10}.';
+  }
+
+  String _normalizarBusca(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp('[áàâãä]'), 'a')
+        .replaceAll(RegExp('[éèêë]'), 'e')
+        .replaceAll(RegExp('[íìîï]'), 'i')
+        .replaceAll(RegExp('[óòôõö]'), 'o')
+        .replaceAll(RegExp('[úùûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  String? _canonicalizar(String value, List<String> options) {
+    final normalized = _normalizarBusca(value);
+    if (normalized.isEmpty) return null;
+    for (final option in options) {
+      if (_normalizarBusca(option) == normalized) return option;
+    }
+    return null;
+  }
+
+  Future<void> _carregarCatalogosAcademicos() async {
+    if (_isLoadingCatalogos) return;
+
+    setState(() {
+      _isLoadingCatalogos = true;
+      _catalogosError = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        _catalogService.instituicoes(),
+        _catalogService.cursos(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _instituicoesDisponiveis = results[0];
+        _cursosDisponiveis = results[1];
+      });
+    } on CatalogServiceException catch (e) {
+      if (!mounted) return;
+      setState(() => _catalogosError = e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _catalogosError = 'Erro de conexão ao carregar cursos e instituições.';
+      });
+    } finally {
+      if (mounted) setState(() => _isLoadingCatalogos = false);
+    }
   }
 
   Future<void> _carregarPerfil() async {
@@ -61,7 +154,10 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
     }
 
     try {
-      await _carregarHabilidadesDisponiveis();
+      await Future.wait([
+        _carregarCatalogosAcademicos(),
+        _carregarHabilidadesDisponiveis(),
+      ]);
 
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/alunos/me'),
@@ -100,10 +196,15 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
           _instituicaoController.text =
               data['instituicao'] ?? aluno['instituicao'] ?? '';
           _cursoController.text = data['curso'] ?? aluno['curso'] ?? '';
-          _anoController.text =
-              data['ano_conclusao']?.toString() ??
-              aluno['ano_conclusao']?.toString() ??
-              '';
+          _instituicaoOriginal = _instituicaoController.text;
+          _cursoOriginal = _cursoController.text;
+          final anoPerfil = int.tryParse(
+            (data['ano_conclusao'] ?? aluno['ano_conclusao'] ?? '').toString(),
+          );
+          _selectedAnoConclusao = _anosConclusaoValidos.contains(anoPerfil)
+              ? anoPerfil
+              : null;
+          _anoController.text = _selectedAnoConclusao?.toString() ?? '';
 
           _urlCurriculo = data['url_curriculo'] ?? aluno['url_curriculo'];
           _cepOriginal = _cepController.text;
@@ -274,6 +375,46 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   }
 
   Future<void> _salvarPerfil() async {
+    if (_selectedAnoConclusao == null ||
+        !_anosConclusaoValidos.contains(_selectedAnoConclusao)) {
+      _mostrarErro(_anoConclusaoMensagemErro);
+      return;
+    }
+
+    if (_isLoadingCatalogos) {
+      _mostrarErro('Aguarde o carregamento de cursos e instituições.');
+      return;
+    }
+
+    if (_catalogosError != null) {
+      _mostrarErro(_catalogosError!);
+      return;
+    }
+
+    final instituicaoAtual = _instituicaoController.text.trim();
+    final cursoAtual = _cursoController.text.trim();
+    final instituicaoSelecionada =
+        _canonicalizar(instituicaoAtual, _instituicoesDisponiveis) ??
+        (_normalizarBusca(instituicaoAtual) ==
+                _normalizarBusca(_instituicaoOriginal ?? '')
+            ? _instituicaoOriginal
+            : null);
+    final cursoSelecionado =
+        _canonicalizar(cursoAtual, _cursosDisponiveis) ??
+        (_normalizarBusca(cursoAtual) == _normalizarBusca(_cursoOriginal ?? '')
+            ? _cursoOriginal
+            : null);
+
+    if (instituicaoSelecionada == null || instituicaoSelecionada.isEmpty) {
+      _mostrarErro('Selecione uma instituição ativa da lista.');
+      return;
+    }
+
+    if (cursoSelecionado == null || cursoSelecionado.isEmpty) {
+      _mostrarErro('Selecione um curso ativo da lista.');
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     final prefs = await SharedPreferences.getInstance();
@@ -285,9 +426,9 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
       'nome_exibicao': _nomeController.text.trim(),
       'cep': _onlyNumbers(_cepController.text),
       'endereco': _enderecoController.text,
-      'instituicao': _instituicaoController.text,
-      'curso': _cursoController.text,
-      'ano_conclusao': int.tryParse(_anoController.text),
+      'instituicao': instituicaoSelecionada,
+      'curso': cursoSelecionado,
+      'ano_conclusao': _selectedAnoConclusao,
     };
 
     if (!enderecoAlterado && _hasValidCoordinates(_latitude, _longitude)) {
@@ -469,6 +610,206 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
                           color: isReadOnly && _isEditing
                               ? const Color(0xFF9CA3AF)
                               : const Color(0xFF1F2937),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCatalogField({
+    required String label,
+    required IconData icon,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required List<String> options,
+    String? valorAntigo,
+  }) {
+    final mergedOptions = {
+      ...options,
+      if (valorAntigo != null && valorAntigo.trim().isNotEmpty) valorAntigo,
+    }.toList();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xFF9CA3AF), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                if (_isEditing)
+                  RawAutocomplete<String>(
+                    textEditingController: controller,
+                    focusNode: focusNode,
+                    optionsBuilder: (textEditingValue) {
+                      final query = _normalizarBusca(textEditingValue.text);
+                      if (query.isEmpty) return mergedOptions;
+                      return mergedOptions.where(
+                        (option) => _normalizarBusca(option).contains(query),
+                      );
+                    },
+                    onSelected: (selection) {
+                      controller.text = selection;
+                      setState(() {});
+                    },
+                    fieldViewBuilder:
+                        (
+                          context,
+                          textEditingController,
+                          fieldFocusNode,
+                          onFieldSubmitted,
+                        ) {
+                          return TextFormField(
+                            controller: textEditingController,
+                            focusNode: fieldFocusNode,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 8,
+                                horizontal: 12,
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF3F4F6),
+                              suffixIcon: const Icon(Icons.search),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          );
+                        },
+                    optionsViewBuilder: (context, onSelected, iterableOptions) {
+                      final items = iterableOptions.toList();
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          borderRadius: BorderRadius.circular(12),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxHeight: 220,
+                              maxWidth: 460,
+                            ),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: items.length,
+                              itemBuilder: (context, index) {
+                                final option = items[index];
+                                final isOld =
+                                    valorAntigo != null &&
+                                    _normalizarBusca(option) ==
+                                        _normalizarBusca(valorAntigo) &&
+                                    _canonicalizar(option, options) == null;
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(option),
+                                  subtitle: isOld
+                                      ? const Text('Valor atual inativo')
+                                      : null,
+                                  onTap: () => onSelected(option),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                else
+                  Text(
+                    controller.text.isEmpty ? 'Não informado' : controller.text,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF1F2937),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnoConclusaoField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.calendar_today_outlined,
+            color: Color(0xFF9CA3AF),
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Previsão de Formatura',
+                  style: TextStyle(color: Color(0xFF6B7280), fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                _isEditing
+                    ? DropdownButtonFormField<int>(
+                        value: _selectedAnoConclusao,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 12,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF3F4F6),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                        items: _anosConclusaoValidos
+                            .map(
+                              (ano) => DropdownMenuItem<int>(
+                                value: ano,
+                                child: Text(ano.toString()),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedAnoConclusao = value;
+                            _anoController.text = value?.toString() ?? '';
+                          });
+                        },
+                      )
+                    : Text(
+                        _anoController.text.isEmpty
+                            ? 'Não informado'
+                            : _anoController.text,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF1F2937),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -771,22 +1112,59 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
                   _buildCard(
                     title: 'Formação Acadêmica',
                     children: [
-                      _buildField(
+                      if (_isLoadingCatalogos)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 16),
+                          child: LinearProgressIndicator(
+                            color: Color(0xFF7C3AED),
+                          ),
+                        ),
+                      if (_catalogosError != null)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFECACA)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _catalogosError!,
+                                style: const TextStyle(
+                                  color: Color(0xFF991B1B),
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: _isLoadingCatalogos
+                                    ? null
+                                    : _carregarCatalogosAcademicos,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Tentar novamente'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      _buildCatalogField(
                         label: 'Instituição',
                         icon: Icons.account_balance_outlined,
                         controller: _instituicaoController,
+                        focusNode: _instituicaoFocusNode,
+                        options: _instituicoesDisponiveis,
+                        valorAntigo: _instituicaoOriginal,
                       ),
-                      _buildField(
+                      _buildCatalogField(
                         label: 'Curso',
                         icon: Icons.school_outlined,
                         controller: _cursoController,
+                        focusNode: _cursoFocusNode,
+                        options: _cursosDisponiveis,
+                        valorAntigo: _cursoOriginal,
                       ),
-                      _buildField(
-                        label: 'Previsão de Formatura',
-                        icon: Icons.calendar_today_outlined,
-                        controller: _anoController,
-                        keyboardType: TextInputType.number,
-                      ),
+                      _buildAnoConclusaoField(),
                     ],
                   ),
 
@@ -799,6 +1177,7 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
                           title: 'Minhas habilidades',
                           habilidades: _habilidadesDisponiveis,
                           selectedIds: _habilidadesSelecionadas,
+                          searchController: _skillsSearchController,
                           onChanged: (updated) {
                             setState(() {
                               _habilidadesSelecionadas = updated;

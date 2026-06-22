@@ -24,6 +24,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
   String? token;
   String? nome;
   int? meuUsuarioId;
+  String? _vagasError;
 
   List<dynamic> vagas = [];
 
@@ -62,16 +63,22 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
       return;
     }
 
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      _vagasError = null;
+    });
 
-    await Future.wait([
-      carregarMeuPerfil(),
-      carregarVagas(),
-      carregarMinhasCandidaturas(),
-    ]);
-
-    if (!mounted) return;
-    setState(() => isLoading = false);
+    try {
+      await Future.wait([
+        carregarMeuPerfil(),
+        carregarVagas(),
+        carregarMinhasCandidaturas(),
+      ]);
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
   }
 
   Future<void> carregarMeuPerfil() async {
@@ -128,9 +135,24 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
           vagas = data.where((vaga) {
             return vaga['ativo'] == 1 || vaga['ativo'] == true;
           }).toList();
+          _vagasError = null;
+          return;
         }
       }
-    } catch (_) {}
+
+      String mensagem = 'Erro ao carregar vagas.';
+      if (response.body.isNotEmpty) {
+        final data = jsonDecode(response.body);
+        if (data is Map && data['message'] != null) {
+          mensagem = data['message'].toString();
+        }
+      }
+      _vagasError = mensagem;
+      vagas = [];
+    } catch (_) {
+      _vagasError = 'Erro de conexão ao carregar vagas.';
+      vagas = [];
+    }
   }
 
   Future<void> carregarMinhasCandidaturas() async {
@@ -554,6 +576,12 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         'Empresa não informada';
   }
 
+  bool empresaVerificada(dynamic vaga) {
+    final empresa = vaga['empresa'];
+    if (empresa == null) return false;
+    return empresa['verificada'] == true || empresa['verificada'] == 1;
+  }
+
   String labelStatusCandidatura(String status) {
     switch (status) {
       case 'PENDENTE':
@@ -612,7 +640,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     final modalidade = vaga['modalidade']?.toString();
 
     if (distancia != null) {
-      return '${distancia.toStringAsFixed(1)} km';
+      return 'Distância aproximada: ${distancia.toStringAsFixed(1)} km';
     }
 
     if (modalidade == 'REMOTO') {
@@ -799,14 +827,31 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            nomeEmpresa(vaga),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF6B7280),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  nomeEmpresa(vaga),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Color(0xFF6B7280),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (empresaVerificada(vaga)) ...[
+                                const SizedBox(width: 6),
+                                const Tooltip(
+                                  message: 'Empresa verificada',
+                                  child: Icon(
+                                    Icons.verified,
+                                    color: Colors.blue,
+                                    size: 16,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),
@@ -1410,6 +1455,44 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                           ),
 
                           const SizedBox(height: 24),
+
+                          if (_vagasError != null)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24.0,
+                              ),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFFFECACA),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _vagasError!,
+                                      style: const TextStyle(
+                                        color: Color(0xFF991B1B),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: carregarDados,
+                                      icon: const Icon(Icons.refresh),
+                                      label: const Text('Tentar novamente'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                          if (_vagasError != null) const SizedBox(height: 16),
 
                           Padding(
                             padding: const EdgeInsets.symmetric(

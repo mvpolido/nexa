@@ -38,6 +38,25 @@ class VagaDetalhesPage extends StatelessWidget {
     return 'Sem restrição de conclusão';
   }
 
+  String nomeEmpresa(Map<String, dynamic> vaga) {
+    final empresa = vaga['empresa'];
+    if (empresa is! Map) return 'Não informada';
+    final usuario = empresa['usuario'];
+    if (usuario is Map) {
+      return usuario['nome_exibicao'] ??
+          usuario['nome'] ??
+          empresa['nome_fantasia'] ??
+          'Não informada';
+    }
+    return empresa['nome_fantasia'] ?? 'Não informada';
+  }
+
+  bool empresaVerificada(Map<String, dynamic> vaga) {
+    final empresa = vaga['empresa'];
+    if (empresa is! Map) return false;
+    return empresa['verificada'] == true || empresa['verificada'] == 1;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Recupera os dados da vaga enviados pelo Navigator
@@ -56,9 +75,22 @@ class VagaDetalhesPage extends StatelessWidget {
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
-            Text(
-              'Empresa: ${vaga['empresa']?['nome_fantasia'] ?? 'Não informada'}',
-              style: const TextStyle(fontSize: 18),
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    'Empresa: ${nomeEmpresa(vaga)}',
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                ),
+                if (empresaVerificada(vaga)) ...[
+                  const SizedBox(width: 8),
+                  const Tooltip(
+                    message: 'Empresa verificada',
+                    child: Icon(Icons.verified, color: Colors.blue, size: 20),
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 20),
             const Text(

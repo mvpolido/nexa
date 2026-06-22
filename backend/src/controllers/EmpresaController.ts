@@ -1,13 +1,44 @@
 import { Request, Response } from 'express';
 import { cnpj as cnpjValidator } from 'cpf-cnpj-validator';
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
 import { AppDataSource } from '../data-source';
-import { Empresa } from '../entities/Empresa';
+import { Empresa, EmpresaStatusVerificacao } from '../entities/Empresa';
 import { Usuario, UsuarioPerfil } from '../entities/Usuario';
 import { Avaliacao } from '../entities/Avaliacao';
 import { Candidatura, CandidaturaStatus } from '../entities/Candidatura';
 import { Vaga } from '../entities/Vaga';
 import { Aluno } from '../entities/Aluno';
+import { verificacaoEmpresaUploadPath } from '../config/verificacaoEmpresaMulter';
+
+function removerDocumentoVerificacao(filename?: string | null) {
+  if (!filename || path.basename(filename) !== filename) return;
+
+  const filePath = path.join(verificacaoEmpresaUploadPath, filename);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+}
+
+function resumoVerificacaoEmpresa(empresa: Empresa) {
+  return {
+    verificada: empresa.verificada,
+    status_verificacao:
+      empresa.status_verificacao ?? EmpresaStatusVerificacao.NAO_SOLICITADA,
+    documento_enviado: Boolean(empresa.documento_verificacao_path),
+    documento_nome_original:
+      empresa.documento_verificacao_nome_original ?? null,
+    solicitada_em: empresa.verificacao_solicitada_em ?? null,
+    analisada_em: empresa.verificacao_analisada_em ?? null,
+    motivo_rejeicao: empresa.verificacao_motivo_rejeicao ?? null,
+  };
+}
+
+function empresaSemDocumentoPath(empresa: Empresa) {
+  const { documento_verificacao_path: _documentoPath, ...segura } = empresa as any;
+  return segura;
+}
 
 export class EmpresaController {
   async create(req: Request, res: Response) {
@@ -96,8 +127,8 @@ export class EmpresaController {
         avaliacao_media = empresa.avaliacoes.reduce((acc, av) => acc + av.nota, 0) / total_avaliacoes;
       }
 
-      return res.status(200).json({ 
-        ...empresa, 
+      return res.status(200).json({
+        ...empresaSemDocumentoPath(empresa),
         avaliacao_media, 
         total_avaliacoes 
       });
@@ -148,11 +179,108 @@ export class EmpresaController {
 
       return res.status(200).json({ 
         message: 'Perfil atualizado com sucesso!',
-        empresa: empresaAtualizada
+        empresa: empresaAtualizada ? empresaSemDocumentoPath(empresaAtualizada) : null
       });
     } catch (error) {
       console.error('Erro ao atualizar perfil:', error);
       return res.status(500).json({ message: 'Erro ao atualizar perfil' });
+    }
+  }
+
+  async solicitarVerificacao(req: Request, res: Response) {
+    const arquivoEnviado = req.file?.filename;
+
+    try {
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        if (arquivoEnviado) removerDocumentoVerificacao(arquivoEnviado);
+        return res.status(403).json({
+          message: 'Apenas empresas podem solicitar verificação.',
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          message: 'Envie um documento em PDF no campo documento.',
+        });
+      }
+
+      const empresaRepository = AppDataSource.getRepository(Empresa);
+      const empresa = await empresaRepository.findOne({
+        where: { id: usuarioLogadoId },
+      });
+
+      if (!empresa) {
+        removerDocumentoVerificacao(arquivoEnviado);
+        return res.status(404).json({ message: 'Perfil de empresa não encontrado.' });
+      }
+
+      if (!empresa.cnpj) {
+        removerDocumentoVerificacao(arquivoEnviado);
+        return res.status(400).json({
+          message: 'Informe o CNPJ antes de solicitar verificação.',
+        });
+      }
+
+      if (
+        empresa.verificada ||
+        empresa.status_verificacao === EmpresaStatusVerificacao.APROVADA
+      ) {
+        removerDocumentoVerificacao(arquivoEnviado);
+        return res.status(409).json({
+          message: 'Esta empresa já está aprovada.',
+        });
+      }
+
+      const documentoAnterior = empresa.documento_verificacao_path;
+
+      empresa.documento_verificacao_path = req.file.filename;
+      empresa.documento_verificacao_nome_original = req.file.originalname;
+      empresa.status_verificacao = EmpresaStatusVerificacao.PENDENTE;
+      empresa.verificada = false;
+      empresa.verificacao_solicitada_em = new Date();
+      empresa.verificacao_analisada_em = null;
+      empresa.verificacao_motivo_rejeicao = null;
+
+      await empresaRepository.save(empresa);
+      removerDocumentoVerificacao(documentoAnterior);
+
+      return res.status(200).json({
+        message: 'Solicitação de verificação enviada com sucesso.',
+        verificacao: resumoVerificacaoEmpresa(empresa),
+      });
+    } catch (error) {
+      if (arquivoEnviado) removerDocumentoVerificacao(arquivoEnviado);
+      console.error('Erro ao solicitar verificação da empresa:', error);
+      return res.status(500).json({ message: 'Erro ao solicitar verificação.' });
+    }
+  }
+
+  async minhaVerificacao(req: Request, res: Response) {
+    try {
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+
+      if (perfilLogado !== UsuarioPerfil.EMPRESA) {
+        return res.status(403).json({
+          message: 'Apenas empresas podem consultar este recurso.',
+        });
+      }
+
+      const empresa = await AppDataSource.getRepository(Empresa).findOne({
+        where: { id: usuarioLogadoId },
+      });
+
+      if (!empresa) {
+        return res.status(404).json({ message: 'Perfil de empresa não encontrado.' });
+      }
+
+      return res.status(200).json(resumoVerificacaoEmpresa(empresa));
+    } catch (error) {
+      console.error('Erro ao consultar verificação da empresa:', error);
+      return res.status(500).json({ message: 'Erro ao consultar verificação.' });
     }
   }
 
@@ -316,7 +444,7 @@ export class EmpresaController {
       }
 
       return res.status(200).json({
-        ...empresa,
+        ...empresaSemDocumentoPath(empresa),
         avaliacao_media,
         total_avaliacoes,
         can_review: perfilLogado === UsuarioPerfil.ALUNO
