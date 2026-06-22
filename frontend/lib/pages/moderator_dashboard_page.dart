@@ -19,6 +19,8 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
   final _buscaEmpresasController = TextEditingController();
   final _buscaVagasController = TextEditingController();
   final _buscaHabilidadesController = TextEditingController();
+  final _buscaInstituicoesController = TextEditingController();
+  final _buscaCursosController = TextEditingController();
 
   int _selectedIndex = 0;
   int? _meuUsuarioId;
@@ -32,11 +34,15 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
   List<dynamic> _empresas = [];
   List<dynamic> _vagas = [];
   List<dynamic> _habilidades = [];
+  List<dynamic> _instituicoes = [];
+  List<dynamic> _cursos = [];
 
   String? _perfilFiltro;
   String? _empresaStatusFiltro;
   bool? _vagaAtivaFiltro;
   String? _areaFiltro;
+  bool? _instituicaoAtivaFiltro;
+  bool? _cursoAtivoFiltro;
 
   static const _purple = Color(0xFF7C3AED);
   static const _areas = [
@@ -77,6 +83,8 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
     _buscaEmpresasController.dispose();
     _buscaVagasController.dispose();
     _buscaHabilidadesController.dispose();
+    _buscaInstituicoesController.dispose();
+    _buscaCursosController.dispose();
     super.dispose();
   }
 
@@ -126,6 +134,14 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
           busca: _buscaHabilidadesController.text,
           area: _areaFiltro,
         ),
+        _service.instituicoes(
+          busca: _buscaInstituicoesController.text,
+          ativa: _instituicaoAtivaFiltro,
+        ),
+        _service.cursos(
+          busca: _buscaCursosController.text,
+          ativo: _cursoAtivoFiltro,
+        ),
       ]);
 
       if (!mounted) return;
@@ -135,6 +151,8 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
         _empresas = results[2] as List<dynamic>;
         _vagas = results[3] as List<dynamic>;
         _habilidades = results[4] as List<dynamic>;
+        _instituicoes = results[5] as List<dynamic>;
+        _cursos = results[6] as List<dynamic>;
       });
     } on AdminServiceException catch (e) {
       _handleError(e);
@@ -174,10 +192,20 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
           busca: _buscaVagasController.text,
           ativo: _vagaAtivaFiltro,
         );
-      } else {
+      } else if (_selectedIndex == 4) {
         _habilidades = await _service.habilidades(
           busca: _buscaHabilidadesController.text,
           area: _areaFiltro,
+        );
+      } else if (_selectedIndex == 5) {
+        _instituicoes = await _service.instituicoes(
+          busca: _buscaInstituicoesController.text,
+          ativa: _instituicaoAtivaFiltro,
+        );
+      } else {
+        _cursos = await _service.cursos(
+          busca: _buscaCursosController.text,
+          ativo: _cursoAtivoFiltro,
         );
       }
 
@@ -465,21 +493,75 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _carregarAbaAtual,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1180),
-          child: switch (_selectedIndex) {
-            0 => _buildOverview(),
-            1 => _buildUsuarios(),
-            2 => _buildEmpresas(),
-            3 => _buildVagas(),
-            _ => _buildHabilidades(),
-          },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth > 48
+            ? constraints.maxWidth - 48
+            : constraints.maxWidth;
+
+        return RefreshIndicator(
+          onRefresh: _carregarAbaAtual,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(24),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: availableWidth,
+                  maxWidth: 1180,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: switch (_selectedIndex) {
+                    0 => _buildOverview(),
+                    1 => _buildUsuarios(),
+                    2 => _buildEmpresas(),
+                    3 => _buildVagas(),
+                    4 => _buildHabilidades(),
+                    5 => _buildInstituicoes(),
+                    _ => _buildCursos(),
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _habilidadesAreaDropdown({double? width}) {
+    return SizedBox(
+      width: width,
+      child: DropdownButtonFormField<String>(
+        value: _areaFiltro,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: 'Área',
+          suffixIcon: _areaFiltro == null
+              ? null
+              : IconButton(
+                  tooltip: 'Limpar filtro',
+                  onPressed: () {
+                    setState(() => _areaFiltro = null);
+                    _carregarAbaAtual();
+                  },
+                  icon: const Icon(Icons.clear),
+                ),
         ),
+        items: _areas
+            .map(
+              (area) => DropdownMenuItem<String>(
+                value: area,
+                child: Text(_areaLabels[area] ?? area),
+              ),
+            )
+            .toList(),
+        onChanged: (value) {
+          setState(() => _areaFiltro = value);
+          _carregarAbaAtual();
+        },
       ),
     );
   }
@@ -854,62 +936,97 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
       grouped.putIfAbsent(area, () => []).add(habilidade);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          'Habilidades',
-          'Crie e mantenha o catálogo usado por alunos e vagas.',
-          action: ElevatedButton.icon(
+    return SizedBox(
+      width: double.infinity,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 760;
+          final newButton = ElevatedButton.icon(
             onPressed: () => _abrirDialogHabilidade(),
             icon: const Icon(Icons.add),
             label: const Text('Nova habilidade'),
-          ),
-        ),
-        _buildFilters([
-          Expanded(
-            child: _searchField(
-              _buscaHabilidadesController,
-              'Buscar habilidade',
-              _carregarAbaAtual,
-            ),
-          ),
-          _dropdown<String>(
-            value: _areaFiltro,
-            hint: 'Área',
-            items: {for (final area in _areas) area: _areaLabels[area] ?? area},
-            onChanged: (value) {
-              setState(() => _areaFiltro = value);
-              _carregarAbaAtual();
-            },
-          ),
-        ]),
-        if (_habilidades.isEmpty)
-          _buildEmptyState(
-            icon: Icons.star_border,
-            title: 'Nenhuma habilidade encontrada',
-            message: 'Ajuste a busca ou cadastre uma nova habilidade.',
-          )
-        else
-          ...grouped.entries.map((entry) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          );
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Habilidades',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Crie e mantenha o catálogo usado por alunos e vagas.',
+                style: TextStyle(color: Color(0xFF6B7280)),
+              ),
+              const SizedBox(height: 20),
+              if (wide)
                 Padding(
-                  padding: const EdgeInsets.only(top: 12, bottom: 8),
-                  child: Text(
-                    _areaLabels[entry.key] ?? entry.key,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _searchField(
+                          _buscaHabilidadesController,
+                          'Buscar habilidade',
+                          _carregarAbaAtual,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _habilidadesAreaDropdown(width: 220),
+                      const SizedBox(width: 12),
+                      newButton,
+                    ],
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _searchField(
+                        _buscaHabilidadesController,
+                        'Buscar habilidade',
+                        _carregarAbaAtual,
+                      ),
+                      const SizedBox(height: 12),
+                      _habilidadesAreaDropdown(width: double.infinity),
+                      const SizedBox(height: 12),
+                      newButton,
+                    ],
                   ),
                 ),
-                ...entry.value.map(_buildHabilidadeCard),
-              ],
-            );
-          }),
-      ],
+              if (_habilidades.isEmpty)
+                _buildEmptyState(
+                  icon: Icons.star_border,
+                  title: 'Nenhuma habilidade encontrada',
+                  message: 'Ajuste a busca ou cadastre uma nova habilidade.',
+                )
+              else
+                ...grouped.entries.map((entry) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12, bottom: 8),
+                        child: Text(
+                          _areaLabels[entry.key] ?? entry.key,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      ...entry.value.map(_buildHabilidadeCard),
+                    ],
+                  );
+                }),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -952,6 +1069,224 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
                       await _executarAcao(
                         () => _service.excluirHabilidade(id),
                         'Habilidade removida com sucesso.',
+                      );
+                    },
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInstituicoes() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          'Instituições',
+          'Gerencie o catálogo usado no cadastro e perfil dos alunos.',
+          action: ElevatedButton.icon(
+            onPressed: () => _abrirDialogInstituicao(),
+            icon: const Icon(Icons.add),
+            label: const Text('Nova instituição'),
+          ),
+        ),
+        _buildFilters([
+          Expanded(
+            child: _searchField(
+              _buscaInstituicoesController,
+              'Buscar instituição ou sigla',
+              _carregarAbaAtual,
+            ),
+          ),
+          _dropdown<bool>(
+            value: _instituicaoAtivaFiltro,
+            hint: 'Status',
+            items: const {true: 'Ativas', false: 'Inativas'},
+            onChanged: (value) {
+              setState(() => _instituicaoAtivaFiltro = value);
+              _carregarAbaAtual();
+            },
+          ),
+        ]),
+        if (_instituicoes.isEmpty)
+          _buildEmptyState(
+            icon: Icons.account_balance_outlined,
+            title: 'Nenhuma instituição encontrada',
+            message: 'Ajuste a busca ou cadastre uma nova instituição.',
+          )
+        else
+          ..._instituicoes.map(_buildInstituicaoCard),
+      ],
+    );
+  }
+
+  Widget _buildInstituicaoCard(dynamic instituicao) {
+    final id = instituicao['id'] is int
+        ? instituicao['id'] as int
+        : int.tryParse('${instituicao['id']}');
+    final ativa = instituicao['ativa'] == true || instituicao['ativa'] == 1;
+
+    return _card(
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: CircleAvatar(
+          backgroundColor: ativa
+              ? const Color(0xFFEDE9FE)
+              : const Color(0xFFF3F4F6),
+          child: Icon(
+            Icons.account_balance_outlined,
+            color: ativa ? _purple : const Color(0xFF6B7280),
+          ),
+        ),
+        title: Text(instituicao['nome'] ?? 'Sem nome'),
+        subtitle: Text(
+          '${instituicao['sigla'] ?? 'Sem sigla'} - ${ativa ? 'Ativa' : 'Inativa'}',
+        ),
+        trailing: Wrap(
+          spacing: 4,
+          children: [
+            IconButton(
+              tooltip: 'Editar',
+              onPressed: id == null
+                  ? null
+                  : () => _abrirDialogInstituicao(instituicao: instituicao),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+            IconButton(
+              tooltip: ativa ? 'Inativar' : 'Ativar',
+              onPressed: id == null
+                  ? null
+                  : () => _executarAcao(
+                      () => _service.atualizarInstituicao(id, ativa: !ativa),
+                      ativa
+                          ? 'Instituição inativada com sucesso.'
+                          : 'Instituição ativada com sucesso.',
+                    ),
+              icon: Icon(ativa ? Icons.visibility_off : Icons.visibility),
+            ),
+            IconButton(
+              tooltip: 'Excluir',
+              onPressed: id == null
+                  ? null
+                  : () async {
+                      final ok = await _confirmar(
+                        'Excluir instituição',
+                        'Se estiver em uso por alunos, ela será inativada.',
+                      );
+                      if (!ok) return;
+                      await _executarAcao(
+                        () => _service.excluirInstituicao(id),
+                        'Instituição processada com sucesso.',
+                      );
+                    },
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCursos() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          'Cursos',
+          'Gerencie o catálogo usado no cadastro e perfil dos alunos.',
+          action: ElevatedButton.icon(
+            onPressed: () => _abrirDialogCurso(),
+            icon: const Icon(Icons.add),
+            label: const Text('Novo curso'),
+          ),
+        ),
+        _buildFilters([
+          Expanded(
+            child: _searchField(
+              _buscaCursosController,
+              'Buscar curso',
+              _carregarAbaAtual,
+            ),
+          ),
+          _dropdown<bool>(
+            value: _cursoAtivoFiltro,
+            hint: 'Status',
+            items: const {true: 'Ativos', false: 'Inativos'},
+            onChanged: (value) {
+              setState(() => _cursoAtivoFiltro = value);
+              _carregarAbaAtual();
+            },
+          ),
+        ]),
+        if (_cursos.isEmpty)
+          _buildEmptyState(
+            icon: Icons.school_outlined,
+            title: 'Nenhum curso encontrado',
+            message: 'Ajuste a busca ou cadastre um novo curso.',
+          )
+        else
+          ..._cursos.map(_buildCursoCard),
+      ],
+    );
+  }
+
+  Widget _buildCursoCard(dynamic curso) {
+    final id = curso['id'] is int
+        ? curso['id'] as int
+        : int.tryParse('${curso['id']}');
+    final ativo = curso['ativo'] == true || curso['ativo'] == 1;
+
+    return _card(
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: CircleAvatar(
+          backgroundColor: ativo
+              ? const Color(0xFFEDE9FE)
+              : const Color(0xFFF3F4F6),
+          child: Icon(
+            Icons.school_outlined,
+            color: ativo ? _purple : const Color(0xFF6B7280),
+          ),
+        ),
+        title: Text(curso['nome'] ?? 'Sem nome'),
+        subtitle: Text(ativo ? 'Ativo' : 'Inativo'),
+        trailing: Wrap(
+          spacing: 4,
+          children: [
+            IconButton(
+              tooltip: 'Editar',
+              onPressed: id == null
+                  ? null
+                  : () => _abrirDialogCurso(curso: curso),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+            IconButton(
+              tooltip: ativo ? 'Inativar' : 'Ativar',
+              onPressed: id == null
+                  ? null
+                  : () => _executarAcao(
+                      () => _service.atualizarCurso(id, ativo: !ativo),
+                      ativo
+                          ? 'Curso inativado com sucesso.'
+                          : 'Curso ativado com sucesso.',
+                    ),
+              icon: Icon(ativo ? Icons.visibility_off : Icons.visibility),
+            ),
+            IconButton(
+              tooltip: 'Excluir',
+              onPressed: id == null
+                  ? null
+                  : () async {
+                      final ok = await _confirmar(
+                        'Excluir curso',
+                        'Se estiver em uso por alunos, ele será inativado.',
+                      );
+                      if (!ok) return;
+                      await _executarAcao(
+                        () => _service.excluirCurso(id),
+                        'Curso processado com sucesso.',
                       );
                     },
               icon: const Icon(Icons.delete_outline),
@@ -1033,6 +1368,140 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
                   editando
                       ? 'Habilidade atualizada com sucesso.'
                       : 'Habilidade criada com sucesso.',
+                );
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    nomeController.dispose();
+  }
+
+  Future<void> _abrirDialogInstituicao({dynamic instituicao}) async {
+    final editando = instituicao != null;
+    final nomeController = TextEditingController(
+      text: editando ? instituicao['nome'] ?? '' : '',
+    );
+    final siglaController = TextEditingController(
+      text: editando ? instituicao['sigla'] ?? '' : '',
+    );
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(editando ? 'Editar instituição' : 'Nova instituição'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nomeController,
+                  decoration: const InputDecoration(labelText: 'Nome'),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Informe o nome.'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: siglaController,
+                  decoration: const InputDecoration(labelText: 'Sigla'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                Navigator.of(context).pop();
+                final id = editando
+                    ? instituicao['id'] is int
+                          ? instituicao['id'] as int
+                          : int.tryParse('${instituicao['id']}')
+                    : null;
+                await _executarAcao(
+                  () => editando && id != null
+                      ? _service.atualizarInstituicao(
+                          id,
+                          nome: nomeController.text.trim(),
+                          sigla: siglaController.text.trim(),
+                        )
+                      : _service.criarInstituicao(
+                          nomeController.text.trim(),
+                          siglaController.text.trim(),
+                        ),
+                  editando
+                      ? 'Instituição atualizada com sucesso.'
+                      : 'Instituição criada com sucesso.',
+                );
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    nomeController.dispose();
+    siglaController.dispose();
+  }
+
+  Future<void> _abrirDialogCurso({dynamic curso}) async {
+    final editando = curso != null;
+    final nomeController = TextEditingController(
+      text: editando ? curso['nome'] ?? '' : '',
+    );
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(editando ? 'Editar curso' : 'Novo curso'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: nomeController,
+              decoration: const InputDecoration(labelText: 'Nome'),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Informe o nome.'
+                  : null,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                Navigator.of(context).pop();
+                final id = editando
+                    ? curso['id'] is int
+                          ? curso['id'] as int
+                          : int.tryParse('${curso['id']}')
+                    : null;
+                await _executarAcao(
+                  () => editando && id != null
+                      ? _service.atualizarCurso(
+                          id,
+                          nome: nomeController.text.trim(),
+                        )
+                      : _service.criarCurso(nomeController.text.trim()),
+                  editando
+                      ? 'Curso atualizado com sucesso.'
+                      : 'Curso criado com sucesso.',
                 );
               },
               child: const Text('Salvar'),
@@ -1635,6 +2104,8 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
     _NavItem('Empresas', Icons.business_outlined),
     _NavItem('Vagas', Icons.work_outline),
     _NavItem('Habilidades', Icons.star_border),
+    _NavItem('Instituições', Icons.account_balance_outlined),
+    _NavItem('Cursos', Icons.school_outlined),
   ];
 }
 

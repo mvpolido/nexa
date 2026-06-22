@@ -9,14 +9,13 @@ import { Candidatura } from "../entities/Candidatura";
 import { Empresa } from "../entities/Empresa";
 import { Habilidade } from "../entities/Habilidade";
 import { Usuario, UsuarioPerfil } from "../entities/Usuario";
-import {
-  coordenadasValidas,
-  geocodificarEndereco,
-} from "../utils/geocoding";
+import { geocodificarEndereco } from "../utils/geocoding";
+import { coordenadasValidas } from "../utils/coordinates";
 import {
   mensagemAnoConclusaoInvalido,
   parseAnoConclusao,
 } from "../utils/anoConclusao";
+import { catalogoPodeManterValorAntigo } from "./CatalogoController";
 
 export class AlunoController {
   private static async empresaPodeAcessarAluno(
@@ -165,14 +164,44 @@ export class AlunoController {
         "cep",
         "endereco",
         "numero",
-        "instituicao",
-        "curso",
       ];
 
       for (const campo of camposAluno) {
         if (Object.prototype.hasOwnProperty.call(req.body, campo)) {
           (aluno as any)[campo] = req.body[campo];
         }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(req.body, "instituicao")) {
+        const instituicao = typeof req.body.instituicao === "string"
+          ? req.body.instituicao.trim()
+          : "";
+        if (
+          !(await catalogoPodeManterValorAntigo(
+            "instituicao",
+            instituicao,
+            aluno.instituicao
+          ))
+        ) {
+          return res.status(400).json({
+            message: "Instituição inválida. Selecione uma opção ativa da lista.",
+          });
+        }
+        aluno.instituicao = instituicao;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(req.body, "curso")) {
+        const curso = typeof req.body.curso === "string"
+          ? req.body.curso.trim()
+          : "";
+        if (
+          !(await catalogoPodeManterValorAntigo("curso", curso, aluno.curso))
+        ) {
+          return res.status(400).json({
+            message: "Curso inválido. Selecione uma opção ativa da lista.",
+          });
+        }
+        aluno.curso = curso;
       }
 
       if (Object.prototype.hasOwnProperty.call(req.body, "ano_conclusao")) {
@@ -193,8 +222,17 @@ export class AlunoController {
           numero: aluno.numero,
         });
 
-        (aluno as any).latitude = coordenadas?.latitude ?? null;
-        (aluno as any).longitude = coordenadas?.longitude ?? null;
+        if (!coordenadas) {
+          (aluno as any).latitude = null;
+          (aluno as any).longitude = null;
+          return res.status(422).json({
+            message:
+              "Não foi possível localizar o endereço informado. Confira CEP, endereço e número.",
+          });
+        }
+
+        (aluno as any).latitude = coordenadas.latitude;
+        (aluno as any).longitude = coordenadas.longitude;
       }
 
       await alunoRepository.save(aluno);

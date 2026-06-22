@@ -9,15 +9,14 @@ import { AlunoHabilidade } from "../entities/AlunoHabilidade";
 import { Empresa } from "../entities/Empresa";
 import { Habilidade } from "../entities/Habilidade";
 import { uploadConfig } from "../config/multer";
-import {
-  coordenadasValidas,
-  geocodificarEndereco,
-} from "../utils/geocoding";
+import { geocodificarEndereco } from "../utils/geocoding";
+import { coordenadasValidas } from "../utils/coordinates";
 import {
   mensagemAnoConclusaoInvalido,
   parseAnoConclusao,
 } from "../utils/anoConclusao";
 import { getJwtSecret } from "../utils/jwtSecret";
+import { catalogoAtivoExiste } from "../controllers/CatalogoController";
 
 const router = Router();
 
@@ -61,101 +60,6 @@ function parseIdArrayField(value: any): { ids: number[]; invalid: boolean } {
 
   return { ids: Array.from(new Set(ids)), invalid: false };
 }
-
-const CURSOS_PERMITIDOS = [
-  "Administração",
-  "Agronomia",
-  "Análise e Desenvolvimento de Sistemas",
-  "Arquitetura e Urbanismo",
-  "Biomedicina",
-  "Ciência da Computação",
-  "Ciências Biológicas",
-  "Ciências Contábeis",
-  "Comunicação Social",
-  "Design",
-  "Design Gráfico",
-  "Direito",
-  "Economia",
-  "Educação Física",
-  "Enfermagem",
-  "Engenharia Ambiental",
-  "Engenharia Civil",
-  "Engenharia da Computação",
-  "Engenharia de Alimentos",
-  "Engenharia de Controle e Automação",
-  "Engenharia de Produção",
-  "Engenharia de Software",
-  "Engenharia Elétrica",
-  "Engenharia Eletrônica",
-  "Engenharia Mecânica",
-  "Engenharia Química",
-  "Farmácia",
-  "Física",
-  "Fisioterapia",
-  "Gestão da Tecnologia da Informação",
-  "Jornalismo",
-  "Letras",
-  "Logística",
-  "Marketing",
-  "Matemática",
-  "Medicina Veterinária",
-  "Nutrição",
-  "Pedagogia",
-  "Psicologia",
-  "Publicidade e Propaganda",
-  "Química",
-  "Recursos Humanos",
-  "Relações Internacionais",
-  "Sistemas de Informação",
-  "Técnico em Administração",
-  "Técnico em Desenvolvimento de Sistemas",
-  "Técnico em Edificações",
-  "Técnico em Eletrotécnica",
-  "Técnico em Informática",
-  "Técnico em Mecânica",
-  "Técnico em Química",
-];
-
-const INSTITUICOES_PERMITIDAS = [
-  "UTFPR - Universidade Tecnológica Federal do Paraná",
-  "IFPR - Instituto Federal do Paraná",
-  "UFPR - Universidade Federal do Paraná",
-  "UEM - Universidade Estadual de Maringá",
-  "UEL - Universidade Estadual de Londrina",
-  "UEPG - Universidade Estadual de Ponta Grossa",
-  "UNESPAR - Universidade Estadual do Paraná",
-  "UNICENTRO - Universidade Estadual do Centro-Oeste",
-  "PUCPR - Pontifícia Universidade Católica do Paraná",
-  "UniCesumar",
-  "Uningá",
-  "Unicesumar",
-  "Unipar",
-  "Universidade Positivo",
-  "Universidade Tuiuti do Paraná",
-  "FAG",
-  "Univel",
-  "Unioeste - Universidade Estadual do Oeste do Paraná",
-  "Campo Real",
-  "FAE Centro Universitário",
-  "Estácio",
-  "Anhanguera",
-  "Unopar",
-  "UniBrasil",
-  "UniDomBosco",
-  "SENAI",
-  "SENAC",
-  "Fatec",
-  "ETEC",
-  "IFSP - Instituto Federal de São Paulo",
-  "USP - Universidade de São Paulo",
-  "UNESP - Universidade Estadual Paulista",
-  "UNICAMP - Universidade Estadual de Campinas",
-  "UFSCar - Universidade Federal de São Carlos",
-  "UFMG - Universidade Federal de Minas Gerais",
-  "UFSC - Universidade Federal de Santa Catarina",
-  "UFRGS - Universidade Federal do Rio Grande do Sul",
-  "UFSM - Universidade Federal de Santa Maria",
-];
 
 router.post("/register", (req, res, next) => {
   uploadConfig.single("curriculo")(req, res, (error: any) => {
@@ -237,13 +141,13 @@ router.post("/register", (req, res, next) => {
         });
       }
 
-      if (!CURSOS_PERMITIDOS.includes(cursoNormalizado)) {
+      if (!(await catalogoAtivoExiste("curso", cursoNormalizado))) {
         return res.status(400).json({
           message: "Curso inválido. Selecione uma opção da lista.",
         });
       }
 
-      if (!INSTITUICOES_PERMITIDAS.includes(instituicaoNormalizada)) {
+      if (!(await catalogoAtivoExiste("instituicao", instituicaoNormalizada))) {
         return res.status(400).json({
           message: "Instituição inválida. Selecione uma opção da lista.",
         });
@@ -342,6 +246,13 @@ router.post("/register", (req, res, next) => {
         longitudeAluno = coordenadas?.longitude;
       }
 
+      if (!coordenadasValidas(latitudeAluno, longitudeAluno)) {
+        return res.status(422).json({
+          message:
+            "Não foi possível localizar o endereço do aluno. Confira CEP, endereço e número.",
+        });
+      }
+
       const anoConclusaoValidado = parseAnoConclusao(ano_conclusao);
       const habilidadeIdsUnicos = parseIdArrayField(habilidadeIds).ids;
 
@@ -363,8 +274,8 @@ router.post("/register", (req, res, next) => {
           cep: cepLimpo || undefined,
           endereco: endereco || undefined,
           numero: numero || undefined,
-          latitude: latitudeAluno,
-          longitude: longitudeAluno,
+          latitude: Number(latitudeAluno),
+          longitude: Number(longitudeAluno),
           url_curriculo: curriculoArquivo || undefined,
         });
 

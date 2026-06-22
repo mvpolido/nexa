@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { AdminController } from "../controllers/AdminController";
+import { CatalogoController } from "../controllers/CatalogoController";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { adminMiddleware } from "../middlewares/adminMiddleware";
 
@@ -33,5 +34,15 @@ adminRoutes.get("/habilidades", AdminController.listarHabilidades);
 adminRoutes.post("/habilidades", AdminController.criarHabilidade);
 adminRoutes.patch("/habilidades/:id", AdminController.atualizarHabilidade);
 adminRoutes.delete("/habilidades/:id", AdminController.deletarHabilidade);
+
+adminRoutes.get("/instituicoes", CatalogoController.listarInstituicoesAdmin);
+adminRoutes.post("/instituicoes", CatalogoController.criarInstituicao);
+adminRoutes.patch("/instituicoes/:id", CatalogoController.atualizarInstituicao);
+adminRoutes.delete("/instituicoes/:id", CatalogoController.deletarInstituicao);
+
+adminRoutes.get("/cursos", CatalogoController.listarCursosAdmin);
+adminRoutes.post("/cursos", CatalogoController.criarCurso);
+adminRoutes.patch("/cursos/:id", CatalogoController.atualizarCurso);
+adminRoutes.delete("/cursos/:id", CatalogoController.deletarCurso);
 
 export default adminRoutes;

@@ -10,6 +10,9 @@ import { Candidatura, CandidaturaStatus } from "./entities/Candidatura";
 import { AlunoHabilidade } from "./entities/AlunoHabilidade";
 import { VagaHabilidade } from "./entities/VagaHabilidade";
 import { habilidadesSeed } from "./data/habilidadesSeed";
+import { Curso } from "./entities/Curso";
+import { InstituicaoEnsino } from "./entities/InstituicaoEnsino";
+import { cursosSeed, instituicoesSeed } from "./data/catalogosSeed";
 
 const TEST_PASSWORD = "123456";
 const habilidadesAlunoTeste = [
@@ -19,6 +22,15 @@ const habilidadesAlunoTeste = [
   "APIs REST",
   "Comunicação",
 ];
+
+function normalizarCatalogoBusca(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
 
 async function runSeed() {
   try {
@@ -33,6 +45,58 @@ async function runSeed() {
     const candidaturaRepository = AppDataSource.getRepository(Candidatura);
     const alunoHabRepository = AppDataSource.getRepository(AlunoHabilidade);
     const vagaHabRepository = AppDataSource.getRepository(VagaHabilidade);
+    const cursoRepository = AppDataSource.getRepository(Curso);
+    const instituicaoRepository = AppDataSource.getRepository(InstituicaoEnsino);
+
+    const seedCursos = async () => {
+      const existentes = await cursoRepository.find();
+
+      for (const nome of cursosSeed) {
+        const nomeNormalizado = nome.trim().replace(/\s+/g, " ");
+        let curso = existentes.find(
+          (item) =>
+            normalizarCatalogoBusca(item.nome) ===
+            normalizarCatalogoBusca(nomeNormalizado)
+        );
+
+        if (!curso) {
+          curso = cursoRepository.create({ nome: nomeNormalizado, ativo: true });
+          existentes.push(curso);
+        }
+
+        curso.nome = nomeNormalizado;
+        await cursoRepository.save(curso);
+      }
+    };
+
+    const seedInstituicoes = async () => {
+      const existentes = await instituicaoRepository.find();
+
+      for (const dados of instituicoesSeed) {
+        const nomeNormalizado = dados.nome.trim().replace(/\s+/g, " ");
+        let instituicao = existentes.find(
+          (item) =>
+            normalizarCatalogoBusca(item.nome) ===
+            normalizarCatalogoBusca(nomeNormalizado)
+        );
+
+        if (!instituicao) {
+          instituicao = instituicaoRepository.create({
+            nome: nomeNormalizado,
+            ativa: true,
+          });
+          existentes.push(instituicao);
+        }
+
+        instituicao.nome = nomeNormalizado;
+        instituicao.sigla = dados.sigla;
+        await instituicaoRepository.save(instituicao);
+      }
+    };
+
+    console.log("\nCriando ou atualizando catálogos...");
+    await seedCursos();
+    await seedInstituicoes();
 
     const getOrCreateUsuario = async (
       email: string,

@@ -10,6 +10,11 @@ import { VagaHabilidade } from "../entities/VagaHabilidade";
 import { Notificacao } from "../entities/Notificacao";
 import { calcularMatchPercent } from "../services/matchService";
 import { geocodificarEndereco } from "../utils/geocoding";
+import {
+  calcularDistanciaKmOuNull,
+  coordenadasValidas,
+  parseCoordenada,
+} from "../utils/coordinates";
 
 export class VagaController {
   private static textoPreenchido(value: unknown) {
@@ -33,10 +38,9 @@ export class VagaController {
 
   private static normalizarCoordenadaOpcional(value: unknown) {
     if (value === undefined) return undefined;
-    if (value === null || value === "") return undefined;
+    if (value === null || value === "") return null;
 
-    const numero = Number(value);
-    return Number.isFinite(numero) ? numero : NaN;
+    return parseCoordenada(value) ?? NaN;
   }
 
   private static normalizarListaCursos(value: unknown) {
@@ -121,32 +125,6 @@ export class VagaController {
     );
   }
 
-  private static coordenadasValidas(latitude: unknown, longitude: unknown) {
-    if (
-      latitude === null ||
-      latitude === undefined ||
-      longitude === null ||
-      longitude === undefined ||
-      latitude === "" ||
-      longitude === ""
-    ) {
-      return false;
-    }
-
-    const lat = Number(latitude);
-    const lng = Number(longitude);
-
-    return (
-      Number.isFinite(lat) &&
-      Number.isFinite(lng) &&
-      !(lat === 0 && lng === 0) &&
-      lat >= -90 &&
-      lat <= 90 &&
-      lng >= -180 &&
-      lng <= 180
-    );
-  }
-
   private static coordenadasForamInformadas(latitude: unknown, longitude: unknown) {
     return latitude !== undefined || longitude !== undefined;
   }
@@ -173,26 +151,7 @@ export class VagaController {
     destinoLat?: unknown,
     destinoLng?: unknown
   ) {
-    if (!VagaController.coordenadasValidas(origemLat, origemLng)) return null;
-    if (!VagaController.coordenadasValidas(destinoLat, destinoLng)) return null;
-
-    const lat1 = Number(origemLat);
-    const lng1 = Number(origemLng);
-    const lat2 = Number(destinoLat);
-    const lng2 = Number(destinoLng);
-    const toRad = (value: number) => (value * Math.PI) / 180;
-    const raioTerraKm = 6371;
-
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLng / 2) *
-        Math.sin(dLng / 2);
-
-    return raioTerraKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    return calcularDistanciaKmOuNull(origemLat, origemLng, destinoLat, destinoLng);
   }
 
   private static validarLocalizacaoVaga(dados: {
@@ -321,7 +280,7 @@ export class VagaController {
           latitudeNormalizada,
           longitudeNormalizada
         ) &&
-        !VagaController.coordenadasValidas(
+        !coordenadasValidas(
           latitudeNormalizada,
           longitudeNormalizada
         )
@@ -345,15 +304,10 @@ export class VagaController {
         return res.status(400).json({ message: erroLocalizacao });
       }
 
-      let latitudeFinal = latitudeNormalizada;
-      let longitudeFinal = longitudeNormalizada;
+      let latitudeFinal: number | null = null;
+      let longitudeFinal: number | null = null;
 
-      if (
-        !VagaController.coordenadasForamInformadas(
-          latitudeNormalizada,
-          longitudeNormalizada
-        )
-      ) {
+      if (modalidade !== VagaModalidade.REMOTO) {
         const coordenadas = await geocodificarEndereco({
           cep,
           endereco,
@@ -362,8 +316,15 @@ export class VagaController {
           estado,
         });
 
-        latitudeFinal = coordenadas?.latitude;
-        longitudeFinal = coordenadas?.longitude;
+        if (!coordenadas) {
+          return res.status(422).json({
+            message:
+              "Não foi possível localizar o endereço da vaga. Confira CEP, endereço, número, cidade e estado.",
+          });
+        }
+
+        latitudeFinal = coordenadas.latitude;
+        longitudeFinal = coordenadas.longitude;
       }
 
       if (habilidadeIds !== undefined && !Array.isArray(habilidadeIds)) {
@@ -425,8 +386,8 @@ export class VagaController {
         numero: VagaController.normalizarTextoOpcional(numero),
         cidade: VagaController.normalizarTextoOpcional(cidade),
         estado: VagaController.normalizarTextoOpcional(estado),
-        latitude: latitudeFinal,
-        longitude: longitudeFinal,
+        latitude: latitudeFinal ?? undefined,
+        longitude: longitudeFinal ?? undefined,
         habilidades: [],
         cursos_destinados:
           cursosNormalizados && cursosNormalizados.length > 0
@@ -834,6 +795,10 @@ export class VagaController {
         latitudeNormalizada === undefined ? vaga.latitude : latitudeNormalizada;
       const longitudeFinal =
         longitudeNormalizada === undefined ? vaga.longitude : longitudeNormalizada;
+      const numeroFinal =
+        numero === undefined
+          ? vaga.numero
+          : VagaController.normalizarTextoOpcional(numero);
       const enderecoFoiAlterado = [
         "cep",
         "endereco",
@@ -841,43 +806,49 @@ export class VagaController {
         "cidade",
         "estado",
       ].some((campo) => Object.prototype.hasOwnProperty.call(req.body, campo));
-      let latitudeParaSalvar: number | string | null | undefined =
-        latitudeFinal;
-      let longitudeParaSalvar: number | string | null | undefined =
-        longitudeFinal;
+      let latitudeParaSalvar: number | null = null;
+      let longitudeParaSalvar: number | null = null;
 
       if (
         VagaController.coordenadasForamInformadas(
           latitudeNormalizada,
           longitudeNormalizada
         ) &&
-        !VagaController.coordenadasValidas(latitudeFinal, longitudeFinal)
+        !coordenadasValidas(latitudeFinal, longitudeFinal)
       ) {
         return res.status(400).json({
           message: "Latitude e longitude devem ser coordenadas válidas.",
         });
       }
 
-      if (
-        !VagaController.coordenadasForamInformadas(
-          latitudeNormalizada,
-          longitudeNormalizada
-        ) &&
-        enderecoFoiAlterado
-      ) {
+      const precisaRecalcularCoordenadas =
+        modalidadeFinal !== VagaModalidade.REMOTO &&
+        (enderecoFoiAlterado ||
+          !coordenadasValidas(latitudeFinal, longitudeFinal));
+
+      if (modalidadeFinal !== VagaModalidade.REMOTO && !precisaRecalcularCoordenadas) {
+        latitudeParaSalvar = Number(latitudeFinal);
+        longitudeParaSalvar = Number(longitudeFinal);
+      }
+
+      if (precisaRecalcularCoordenadas) {
         const coordenadas = await geocodificarEndereco({
           cep: cepFinal,
           endereco: enderecoFinal,
-          numero:
-            numero === undefined
-              ? vaga.numero
-              : VagaController.normalizarTextoOpcional(numero),
+          numero: numeroFinal,
           cidade: cidadeFinal,
           estado: estadoFinal,
         });
 
-        latitudeParaSalvar = coordenadas?.latitude ?? null;
-        longitudeParaSalvar = coordenadas?.longitude ?? null;
+        if (!coordenadas) {
+          return res.status(422).json({
+            message:
+              "Não foi possível localizar o endereço da vaga. Confira CEP, endereço, número, cidade e estado.",
+          });
+        }
+
+        latitudeParaSalvar = coordenadas.latitude;
+        longitudeParaSalvar = coordenadas.longitude;
       }
       const cursosForamEnviados = VagaController.bodyTemCampo(
         req.body,
@@ -953,14 +924,11 @@ export class VagaController {
       vaga.modalidade = modalidadeFinal;
       vaga.cep = cepFinal ?? undefined;
       vaga.endereco = enderecoFinal ?? undefined;
-      vaga.numero =
-        numero === undefined
-          ? vaga.numero
-          : VagaController.normalizarTextoOpcional(numero) ?? undefined;
+      vaga.numero = numeroFinal ?? undefined;
       vaga.cidade = cidadeFinal ?? undefined;
       vaga.estado = estadoFinal ?? undefined;
-      (vaga as any).latitude = latitudeParaSalvar ?? null;
-      (vaga as any).longitude = longitudeParaSalvar ?? null;
+      (vaga as any).latitude = latitudeParaSalvar;
+      (vaga as any).longitude = longitudeParaSalvar;
       if (cursosForamEnviados) {
         vaga.cursos_destinados =
           cursosNormalizados && cursosNormalizados.length > 0

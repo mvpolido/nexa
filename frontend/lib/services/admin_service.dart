@@ -184,6 +184,22 @@ class AdminService {
     return data is List ? data : <dynamic>[];
   }
 
+  Future<List<dynamic>> instituicoes({String? busca, bool? ativa}) async {
+    final data = await _get('/admin/instituicoes', {
+      'busca': busca,
+      'ativa': ativa?.toString(),
+    });
+    return data is List ? data : <dynamic>[];
+  }
+
+  Future<List<dynamic>> cursos({String? busca, bool? ativo}) async {
+    final data = await _get('/admin/cursos', {
+      'busca': busca,
+      'ativo': ativo?.toString(),
+    });
+    return data is List ? data : <dynamic>[];
+  }
+
   Future<void> verificarEmpresa(int id, bool verificada) async {
     await _patch('/admin/empresas/$id/verificar', {'verificada': verificada});
   }
@@ -214,6 +230,45 @@ class AdminService {
 
   Future<void> excluirHabilidade(int id) async {
     await _delete('/admin/habilidades/$id');
+  }
+
+  Future<void> criarInstituicao(String nome, String? sigla) async {
+    await _post('/admin/instituicoes', {
+      'nome': nome,
+      if (sigla != null && sigla.trim().isNotEmpty) 'sigla': sigla,
+    });
+  }
+
+  Future<void> atualizarInstituicao(
+    int id, {
+    String? nome,
+    String? sigla,
+    bool? ativa,
+  }) async {
+    await _patch('/admin/instituicoes/$id', {
+      if (nome != null) 'nome': nome,
+      if (sigla != null) 'sigla': sigla,
+      if (ativa != null) 'ativa': ativa,
+    });
+  }
+
+  Future<void> excluirInstituicao(int id) async {
+    await _delete('/admin/instituicoes/$id');
+  }
+
+  Future<void> criarCurso(String nome) async {
+    await _post('/admin/cursos', {'nome': nome});
+  }
+
+  Future<void> atualizarCurso(int id, {String? nome, bool? ativo}) async {
+    await _patch('/admin/cursos/$id', {
+      if (nome != null) 'nome': nome,
+      if (ativo != null) 'ativo': ativo,
+    });
+  }
+
+  Future<void> excluirCurso(int id) async {
+    await _delete('/admin/cursos/$id');
   }
 
   Future<void> excluirVaga(int id) async {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../config/api_config.dart';
+import '../services/catalog_service.dart';
 import '../widgets/skill_selector.dart';
 
 enum RegisterStep {
@@ -44,6 +45,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _enderecoController = TextEditingController();
 
   // Controladores Aluno
+  final _catalogService = CatalogService();
   final _cpfController = TextEditingController();
   final _instituicaoController = TextEditingController();
   final _cursoController = TextEditingController();
@@ -52,8 +54,12 @@ class _RegisterPageState extends State<RegisterPage> {
   final _instituicaoFocusNode = FocusNode();
   final _cursoFocusNode = FocusNode();
   List<dynamic> _habilidadesDisponiveis = [];
+  List<String> _cursosDisponiveis = [];
+  List<String> _instituicoesDisponiveis = [];
   Set<int> _selectedSkillIds = {};
+  bool _isLoadingCatalogos = false;
   bool _isLoadingSkills = false;
+  String? _catalogosError;
   String? _skillsError;
   String? _selectedInstituicao;
   String? _selectedCurso;
@@ -76,127 +82,6 @@ class _RegisterPageState extends State<RegisterPage> {
   // Controladores Empresa
   final _cnpjController = TextEditingController();
   final _descricaoController = TextEditingController();
-
-  static const List<String> _cursosPermitidos = [
-    'Administração',
-    'Agronomia',
-    'Análise e Desenvolvimento de Sistemas',
-    'Arquitetura e Urbanismo',
-    'Biomedicina',
-    'Ciência da Computação',
-    'Ciências Biológicas',
-    'Ciências Contábeis',
-    'Comunicação Social',
-    'Design',
-    'Design Gráfico',
-    'Direito',
-    'Economia',
-    'Educação Física',
-    'Enfermagem',
-    'Engenharia Ambiental',
-    'Engenharia Civil',
-    'Engenharia da Computação',
-    'Engenharia de Alimentos',
-    'Engenharia de Controle e Automação',
-    'Engenharia de Produção',
-    'Engenharia de Software',
-    'Engenharia Elétrica',
-    'Engenharia Eletrônica',
-    'Engenharia Mecânica',
-    'Engenharia Química',
-    'Farmácia',
-    'Física',
-    'Fisioterapia',
-    'Gestão da Tecnologia da Informação',
-    'Jornalismo',
-    'Letras',
-    'Logística',
-    'Marketing',
-    'Matemática',
-    'Medicina Veterinária',
-    'Nutrição',
-    'Pedagogia',
-    'Psicologia',
-    'Publicidade e Propaganda',
-    'Química',
-    'Recursos Humanos',
-    'Relações Internacionais',
-    'Sistemas de Informação',
-    'Técnico em Administração',
-    'Técnico em Desenvolvimento de Sistemas',
-    'Técnico em Edificações',
-    'Técnico em Eletrotécnica',
-    'Técnico em Informática',
-    'Técnico em Mecânica',
-    'Técnico em Química',
-  ];
-
-  static const List<String> _instituicoesPermitidas = [
-    'UTFPR - Universidade Tecnológica Federal do Paraná',
-    'IFPR - Instituto Federal do Paraná',
-    'UFPR - Universidade Federal do Paraná',
-    'UEM - Universidade Estadual de Maringá',
-    'UEL - Universidade Estadual de Londrina',
-    'UEPG - Universidade Estadual de Ponta Grossa',
-    'UNESPAR - Universidade Estadual do Paraná',
-    'UNICENTRO - Universidade Estadual do Centro-Oeste',
-    'PUCPR - Pontifícia Universidade Católica do Paraná',
-    'UniCesumar',
-    'Uningá',
-    'Unicesumar',
-    'Unipar',
-    'Universidade Positivo',
-    'Universidade Tuiuti do Paraná',
-    'FAG',
-    'Univel',
-    'Unioeste - Universidade Estadual do Oeste do Paraná',
-    'Campo Real',
-    'FAE Centro Universitário',
-    'Estácio',
-    'Anhanguera',
-    'Unopar',
-    'UniBrasil',
-    'UniDomBosco',
-    'SENAI',
-    'SENAC',
-    'Fatec',
-    'ETEC',
-    'IFSP - Instituto Federal de São Paulo',
-    'USP - Universidade de São Paulo',
-    'UNESP - Universidade Estadual Paulista',
-    'UNICAMP - Universidade Estadual de Campinas',
-    'UFSCar - Universidade Federal de São Carlos',
-    'UFMG - Universidade Federal de Minas Gerais',
-    'UFSC - Universidade Federal de Santa Catarina',
-    'UFRGS - Universidade Federal do Rio Grande do Sul',
-    'UFSM - Universidade Federal de Santa Maria',
-  ];
-
-  static const Map<String, String> _cursoAliases = {
-    'eng eletronica': 'Engenharia Eletrônica',
-    'engenharia eletronica': 'Engenharia Eletrônica',
-    'ads': 'Análise e Desenvolvimento de Sistemas',
-    'cc': 'Ciência da Computação',
-    'sistemas': 'Sistemas de Informação',
-    'eng software': 'Engenharia de Software',
-  };
-
-  static const Map<String, String> _instituicaoAliases = {
-    'utfpr': 'UTFPR - Universidade Tecnológica Federal do Paraná',
-    'universidade tecnologica federal do parana':
-        'UTFPR - Universidade Tecnológica Federal do Paraná',
-    'ifpr': 'IFPR - Instituto Federal do Paraná',
-    'ufpr': 'UFPR - Universidade Federal do Paraná',
-    'uem': 'UEM - Universidade Estadual de Maringá',
-    'uel': 'UEL - Universidade Estadual de Londrina',
-    'unespar': 'UNESPAR - Universidade Estadual do Paraná',
-    'unicentro': 'UNICENTRO - Universidade Estadual do Centro-Oeste',
-    'pucpr': 'PUCPR - Pontifícia Universidade Católica do Paraná',
-    'faculdade tecnologica': 'Fatec',
-    'fatec': 'Fatec',
-    'federal do parana': 'UFPR - Universidade Federal do Paraná',
-    'estadual de maringa': 'UEM - Universidade Estadual de Maringá',
-  };
 
   List<int> get _anosConclusaoValidos {
     final maxYear = DateTime.now().year + 10;
@@ -240,6 +125,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _skillsSearchController.addListener(_refreshUI);
     _cnpjController.addListener(_refreshUI);
     _descricaoController.addListener(_refreshUI);
+    _carregarCatalogosAcademicos();
   }
 
   void _refreshUI() {
@@ -324,11 +210,7 @@ class _RegisterPageState extends State<RegisterPage> {
         .trim();
   }
 
-  String? _canonicalizar(
-    String value,
-    List<String> options,
-    Map<String, String> aliases,
-  ) {
+  String? _canonicalizar(String value, List<String> options) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return null;
 
@@ -336,20 +218,17 @@ class _RegisterPageState extends State<RegisterPage> {
     for (final option in options) {
       final normalizedOption = _normalizarBusca(option);
       if (normalizedOption == normalized) return option;
-      if (normalizedOption.contains(normalized) && normalized.length >= 4) {
-        return option;
-      }
     }
 
-    return aliases[normalized];
+    return null;
   }
 
   String? _canonicalCurso(String value) {
-    return _canonicalizar(value, _cursosPermitidos, _cursoAliases);
+    return _canonicalizar(value, _cursosDisponiveis);
   }
 
   String? _canonicalInstituicao(String value) {
-    return _canonicalizar(value, _instituicoesPermitidas, _instituicaoAliases);
+    return _canonicalizar(value, _instituicoesDisponiveis);
   }
 
   String? get _cpfError {
@@ -418,7 +297,9 @@ class _RegisterPageState extends State<RegisterPage> {
 
   // --- FUNÇÕES DE VALIDAÇÃO DE ESTADO DOS BOTÕES ---
   bool _isStudentStep1Valid() {
-    return _nomeController.text.trim().isNotEmpty &&
+    return !_isLoadingCatalogos &&
+        _catalogosError == null &&
+        _nomeController.text.trim().isNotEmpty &&
         _validarCpf(_cpfController.text) &&
         (_selectedInstituicao ??
                 _canonicalInstituicao(_instituicaoController.text)) !=
@@ -481,6 +362,8 @@ class _RegisterPageState extends State<RegisterPage> {
       _cpfInteragido = true;
       _studentStep1TentouAvancar = true;
     });
+
+    if (_catalogosError != null || _isLoadingCatalogos) return;
 
     if (_isStudentStep1Valid()) {
       final cursoCanonico = _canonicalCurso(_cursoController.text);
@@ -623,6 +506,40 @@ class _RegisterPageState extends State<RegisterPage> {
         _skillsError = 'Erro de conexão ao carregar habilidades.';
         _isLoadingSkills = false;
       });
+    }
+  }
+
+  Future<void> _carregarCatalogosAcademicos() async {
+    if (_isLoadingCatalogos) return;
+
+    setState(() {
+      _isLoadingCatalogos = true;
+      _catalogosError = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        _catalogService.instituicoes(),
+        _catalogService.cursos(),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _instituicoesDisponiveis = results[0];
+        _cursosDisponiveis = results[1];
+      });
+    } on CatalogServiceException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _catalogosError = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _catalogosError = 'Erro de conexão ao carregar cursos e instituições.';
+      });
+    } finally {
+      if (mounted) setState(() => _isLoadingCatalogos = false);
     }
   }
 
@@ -824,7 +741,6 @@ class _RegisterPageState extends State<RegisterPage> {
     required TextEditingController controller,
     required FocusNode focusNode,
     required List<String> options,
-    required Map<String, String> aliases,
     required ValueChanged<String?> onCanonicalChanged,
     String? errorText,
   }) {
@@ -841,14 +757,11 @@ class _RegisterPageState extends State<RegisterPage> {
               return options;
             }
 
-            final aliasMatches = aliases.entries
-                .where((entry) => entry.key.contains(query))
-                .map((entry) => entry.value);
             final optionMatches = options.where(
               (option) => _normalizarBusca(option).contains(query),
             );
 
-            return {...optionMatches, ...aliasMatches};
+            return optionMatches;
           },
           onSelected: (selection) {
             controller.text = selection;
@@ -870,7 +783,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     suffixIcon: const Icon(Icons.search),
                   ),
                   onChanged: (value) {
-                    onCanonicalChanged(_canonicalizar(value, options, aliases));
+                    onCanonicalChanged(_canonicalizar(value, options));
                     _refreshUI();
                   },
                 );
@@ -986,13 +899,44 @@ class _RegisterPageState extends State<RegisterPage> {
           },
         ),
         const SizedBox(height: 16),
+        if (_isLoadingCatalogos)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 16),
+            child: LinearProgressIndicator(color: Color(0xFF7C3AED)),
+          ),
+        if (_catalogosError != null)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFECACA)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _catalogosError!,
+                  style: const TextStyle(color: Color(0xFF991B1B)),
+                ),
+                TextButton.icon(
+                  onPressed: _isLoadingCatalogos
+                      ? null
+                      : _carregarCatalogosAcademicos,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Tentar novamente'),
+                ),
+              ],
+            ),
+          ),
         _buildAutocompleteField(
           label: 'Instituição de Ensino',
           hint: 'Digite para pesquisar...',
           controller: _instituicaoController,
           focusNode: _instituicaoFocusNode,
-          options: _instituicoesPermitidas,
-          aliases: _instituicaoAliases,
+          options: _instituicoesDisponiveis,
           onCanonicalChanged: (value) {
             _selectedInstituicao = value;
           },
@@ -1008,8 +952,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 hint: 'Digite para pesquisar...',
                 controller: _cursoController,
                 focusNode: _cursoFocusNode,
-                options: _cursosPermitidos,
-                aliases: _cursoAliases,
+                options: _cursosDisponiveis,
                 onCanonicalChanged: (value) {
                   _selectedCurso = value;
                 },

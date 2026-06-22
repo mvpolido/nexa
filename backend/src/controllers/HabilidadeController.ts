@@ -1,10 +1,19 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
+import { AlunoHabilidade } from "../entities/AlunoHabilidade";
 import { Habilidade, HabilidadeArea } from "../entities/Habilidade";
+import { VagaHabilidade } from "../entities/VagaHabilidade";
 import { habilidadesSeed } from "../data/habilidadesSeed";
 
 function normalizarNomeHabilidade(nome: string): string {
   return nome.trim().replace(/\s+/g, " ");
+}
+
+function normalizarComparacaoHabilidade(nome: string): string {
+  return normalizarNomeHabilidade(nome)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function validarArea(area: unknown): HabilidadeArea | null {
@@ -14,11 +23,14 @@ function validarArea(area: unknown): HabilidadeArea | null {
     : null;
 }
 
-async function findByNomeCaseInsensitive(nome: string) {
-  return AppDataSource.getRepository(Habilidade)
-    .createQueryBuilder("habilidade")
-    .where("LOWER(habilidade.nome) = LOWER(:nome)", { nome })
-    .getOne();
+async function findByNomeNormalizado(nome: string) {
+  const alvo = normalizarComparacaoHabilidade(nome);
+  const habilidades = await AppDataSource.getRepository(Habilidade).find();
+  return (
+    habilidades.find(
+      (habilidade) => normalizarComparacaoHabilidade(habilidade.nome) === alvo
+    ) ?? null
+  );
 }
 
 export class HabilidadeController {
@@ -80,7 +92,7 @@ export class HabilidadeController {
         });
       }
 
-      const existente = await findByNomeCaseInsensitive(nomeNormalizado);
+      const existente = await findByNomeNormalizado(nomeNormalizado);
 
       if (existente) {
         return res.status(409).json({
@@ -113,7 +125,7 @@ export class HabilidadeController {
 
       for (const habilidadeSeed of habilidadesSeed) {
         const nomeNormalizado = normalizarNomeHabilidade(habilidadeSeed.nome);
-        const habilidadeExistente = await findByNomeCaseInsensitive(nomeNormalizado);
+        const habilidadeExistente = await findByNomeNormalizado(nomeNormalizado);
 
         if (habilidadeExistente) {
           habilidadeExistente.nome = nomeNormalizado;
@@ -166,6 +178,22 @@ export class HabilidadeController {
         });
       }
 
+      const [vinculosAluno, vinculosVaga] = await Promise.all([
+        AppDataSource.getRepository(AlunoHabilidade).count({
+          where: { habilidade_id: habilidadeId },
+        }),
+        AppDataSource.getRepository(VagaHabilidade).count({
+          where: { habilidade_id: habilidadeId },
+        }),
+      ]);
+
+      if (vinculosAluno > 0 || vinculosVaga > 0) {
+        return res.status(409).json({
+          message:
+            "Não é possível excluir esta habilidade porque ela está vinculada a alunos ou vagas.",
+        });
+      }
+
       await repo.remove(habilidade);
 
       return res.status(200).json({
@@ -200,33 +228,29 @@ export class HabilidadeController {
         });
       }
 
-      if (nome !== undefined) {
-        if (typeof nome !== "string" || !nome.trim()) {
-          return res.status(400).json({
-            message: "Campo nome é obrigatório.",
-          });
-        }
-
-        const nomeNormalizado = normalizarNomeHabilidade(nome);
-        const existente = await findByNomeCaseInsensitive(nomeNormalizado);
-        if (existente && existente.id !== habilidade.id) {
-          return res.status(409).json({
-            message: "Habilidade já cadastrada.",
-          });
-        }
-
-        habilidade.nome = nomeNormalizado;
+      if (!nome || typeof nome !== "string" || !nome.trim()) {
+        return res.status(400).json({
+          message: "Campo nome é obrigatório.",
+        });
       }
 
-      if (area !== undefined) {
-        const areaNormalizada = validarArea(area);
-        if (!areaNormalizada) {
-          return res.status(400).json({
-            message: "Área de habilidade inválida.",
-          });
-        }
-        habilidade.area = areaNormalizada;
+      const areaNormalizada = validarArea(area);
+      if (!areaNormalizada) {
+        return res.status(400).json({
+          message: "Área de habilidade inválida.",
+        });
       }
+
+      const nomeNormalizado = normalizarNomeHabilidade(nome);
+      const existente = await findByNomeNormalizado(nomeNormalizado);
+      if (existente && existente.id !== habilidade.id) {
+        return res.status(409).json({
+          message: "Habilidade já cadastrada.",
+        });
+      }
+
+      habilidade.nome = nomeNormalizado;
+      habilidade.area = areaNormalizada;
 
       const salva = await repo.save(habilidade);
       return res.status(200).json(salva);
