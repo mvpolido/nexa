@@ -1,4 +1,6 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
+import 'dart:html' as import_html;
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,7 +34,7 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
   List<dynamic> _habilidades = [];
 
   String? _perfilFiltro;
-  bool? _empresaVerificadaFiltro;
+  String? _empresaStatusFiltro;
   bool? _vagaAtivaFiltro;
   String? _areaFiltro;
 
@@ -98,10 +100,12 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
   }
 
   Future<void> _carregarDados() async {
-    setState(() {
-      _loading = true;
-      _erro = null;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _erro = null;
+      });
+    }
 
     try {
       final results = await Future.wait([
@@ -112,7 +116,7 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
         ),
         _service.empresas(
           busca: _buscaEmpresasController.text,
-          verificada: _empresaVerificadaFiltro,
+          statusVerificacao: _empresaStatusFiltro,
         ),
         _service.vagas(
           busca: _buscaVagasController.text,
@@ -131,7 +135,6 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
         _empresas = results[2] as List<dynamic>;
         _vagas = results[3] as List<dynamic>;
         _habilidades = results[4] as List<dynamic>;
-        _loading = false;
       });
     } on AdminServiceException catch (e) {
       _handleError(e);
@@ -139,16 +142,19 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
       if (!mounted) return;
       setState(() {
         _erro = 'Erro de conexão com o servidor.';
-        _loading = false;
       });
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _carregarAbaAtual() async {
-    setState(() {
-      _loading = true;
-      _erro = null;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _erro = null;
+      });
+    }
 
     try {
       if (_selectedIndex == 0) {
@@ -161,7 +167,7 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
       } else if (_selectedIndex == 2) {
         _empresas = await _service.empresas(
           busca: _buscaEmpresasController.text,
-          verificada: _empresaVerificadaFiltro,
+          statusVerificacao: _empresaStatusFiltro,
         );
       } else if (_selectedIndex == 3) {
         _vagas = await _service.vagas(
@@ -176,15 +182,16 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
       }
 
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {});
     } on AdminServiceException catch (e) {
       _handleError(e);
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _erro = 'Erro de conexão com o servidor.';
-        _loading = false;
       });
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -290,6 +297,49 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
   bool _isVagaAtiva(dynamic vaga) {
     final ativo = vaga['ativo'];
     return ativo == 1 || ativo == true;
+  }
+
+  bool _isEmpresaVerificada(dynamic empresa) {
+    return empresa['verificada'] == true || empresa['verificada'] == 1;
+  }
+
+  String _statusVerificacao(dynamic empresa) {
+    return empresa['status_verificacao']?.toString() ??
+        (_isEmpresaVerificada(empresa) ? 'aprovada' : 'nao_solicitada');
+  }
+
+  String _statusVerificacaoLabel(String? status) {
+    switch (status) {
+      case 'pendente':
+        return 'Pendente';
+      case 'aprovada':
+        return 'Aprovada';
+      case 'rejeitada':
+        return 'Rejeitada';
+      case 'nao_solicitada':
+      default:
+        return 'Não solicitada';
+    }
+  }
+
+  Color _statusVerificacaoColor(String? status) {
+    switch (status) {
+      case 'pendente':
+        return Colors.orange;
+      case 'aprovada':
+        return Colors.blue;
+      case 'rejeitada':
+        return Colors.red;
+      default:
+        return const Color(0xFF6B7280);
+    }
+  }
+
+  Widget _verifiedBadge({double size = 18}) {
+    return Tooltip(
+      message: 'Empresa verificada',
+      child: Icon(Icons.verified, color: Colors.blue, size: size),
+    );
   }
 
   @override
@@ -541,6 +591,7 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
 
     return _card(
       child: ListTile(
+        onTap: id == null ? null : () => _abrirDetalheUsuario(id),
         contentPadding: EdgeInsets.zero,
         leading: CircleAvatar(
           backgroundColor: const Color(0xFFEDE9FE),
@@ -590,15 +641,7 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
               _carregarAbaAtual,
             ),
           ),
-          _dropdown<bool>(
-            value: _empresaVerificadaFiltro,
-            hint: 'Status',
-            items: const {true: 'Verificadas', false: 'Pendentes'},
-            onChanged: (value) {
-              setState(() => _empresaVerificadaFiltro = value);
-              _carregarAbaAtual();
-            },
-          ),
+          _empresaStatusFilter(),
         ]),
         if (_empresas.isEmpty)
           _buildEmptyState(
@@ -613,61 +656,115 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
   }
 
   Widget _buildEmpresaCard(dynamic empresa) {
-    final usuario = empresa['usuario'] ?? {};
-    final verificada = empresa['verificada'] == true;
+    final verificada = _isEmpresaVerificada(empresa);
+    final status = _statusVerificacao(empresa);
+    final isPendente = status == 'pendente';
+    final documentoEnviado = empresa['documento_enviado'] == true;
     final id = empresa['id'] is int
         ? empresa['id'] as int
         : int.tryParse('${empresa['id']}');
 
     return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: InkWell(
+        onTap: id == null ? null : () => _abrirDetalheEmpresa(id),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          decoration: BoxDecoration(
+            border: isPendente
+                ? Border(
+                    left: BorderSide(color: Colors.orange.shade600, width: 4),
+                  )
+                : null,
+          ),
+          padding: EdgeInsets.only(left: isPendente ? 12 : 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  usuario['nome_exibicao'] ?? 'Empresa sem nome',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+              Row(
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      children: [
+                        Text(
+                          empresa['nome_exibicao'] ??
+                              empresa['usuario']?['nome_exibicao'] ??
+                              'Empresa sem nome',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (verificada) _verifiedBadge(),
+                      ],
+                    ),
                   ),
-                ),
+                  Chip(
+                    label: Text(_statusVerificacaoLabel(status)),
+                    backgroundColor: _statusVerificacaoColor(
+                      status,
+                    ).withOpacity(0.12),
+                    labelStyle: TextStyle(
+                      color: _statusVerificacaoColor(status),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-              Chip(
-                label: Text(verificada ? 'Verificada' : 'Pendente'),
-                backgroundColor: verificada
-                    ? const Color(0xFFDCFCE7)
-                    : const Color(0xFFFEF3C7),
+              const SizedBox(height: 8),
+              Text(
+                empresa['email'] ?? empresa['usuario']?['email'] ?? 'Sem email',
+              ),
+              Text('CNPJ: ${_maskCnpj(empresa['cnpj'])}'),
+              Text(
+                'Vagas: ${empresa['quantidade_vagas'] ?? empresa['quantidadeVagas'] ?? 0}',
+              ),
+              if (empresa['verificacao_solicitada_em'] != null)
+                Text(
+                  'Solicitada em: ${_formatDate(empresa['verificacao_solicitada_em'])}',
+                ),
+              const SizedBox(height: 8),
+              Text(
+                empresa['descricao'] ?? 'Sem descrição.',
+                style: const TextStyle(color: Color(0xFF6B7280)),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: id == null || !documentoEnviado
+                        ? null
+                        : () => _abrirDocumentoVerificacao(id),
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: const Text('Ver documento'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed:
+                        id == null || !documentoEnviado || status == 'aprovada'
+                        ? null
+                        : () => _aprovarEmpresa(id),
+                    icon: const Icon(Icons.verified),
+                    label: const Text('Aprovar'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: id == null || status == 'aprovada'
+                        ? null
+                        : () => _rejeitarEmpresa(id),
+                    icon: const Icon(Icons.cancel_outlined),
+                    label: const Text('Rejeitar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(usuario['email'] ?? 'Sem email'),
-          Text('CNPJ: ${_maskCnpj(empresa['cnpj'])}'),
-          Text('Vagas: ${empresa['quantidadeVagas'] ?? 0}'),
-          const SizedBox(height: 8),
-          Text(
-            empresa['descricao'] ?? 'Sem descrição.',
-            style: const TextStyle(color: Color(0xFF6B7280)),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: id == null
-                  ? null
-                  : () => _executarAcao(
-                      () => _service.verificarEmpresa(id, !verificada),
-                      verificada
-                          ? 'Verificação removida com sucesso.'
-                          : 'Empresa verificada com sucesso.',
-                    ),
-              icon: Icon(verificada ? Icons.verified_outlined : Icons.verified),
-              label: Text(verificada ? 'Retirar verificação' : 'Verificar'),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -948,6 +1045,321 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
     nomeController.dispose();
   }
 
+  Future<void> _abrirDetalheUsuario(int id) async {
+    try {
+      final detalhe = await _service.usuarioDetalhe(id);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(detalhe['nome_exibicao'] ?? 'Detalhes do usuário'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _detailRow('Email', detalhe['email']),
+                  _detailRow('Perfil', _perfilLabel(detalhe['perfil'])),
+                  _detailRow('Criado em', _formatDate(detalhe['criado_em'])),
+                  const Divider(height: 24),
+                  if (detalhe['perfil'] == 'aluno') ...[
+                    _detailRow('CPF', detalhe['cpf']),
+                    _detailRow('Curso', detalhe['curso']),
+                    _detailRow('Instituição', detalhe['instituicao']),
+                    _detailRow('Ano de conclusão', detalhe['ano_conclusao']),
+                    _detailRow('CEP', detalhe['cep']),
+                    _detailRow('Endereço', detalhe['endereco']),
+                    _detailRow('Número', detalhe['numero']),
+                    _detailRow(
+                      'Currículo',
+                      detalhe['possui_curriculo'] == true
+                          ? 'Anexado'
+                          : 'Não anexado',
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Habilidades',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    _skillWrap(detalhe['habilidades']),
+                  ] else if (detalhe['perfil'] == 'empresa') ...[
+                    _detailRow('CNPJ', _maskCnpj(detalhe['cnpj'])),
+                    _detailRow('Descrição', detalhe['descricao']),
+                    _detailRow(
+                      'Localização',
+                      '${detalhe['latitude'] ?? 'sem latitude'} / ${detalhe['longitude'] ?? 'sem longitude'}',
+                    ),
+                    _detailRow(
+                      'Verificada',
+                      detalhe['verificada'] == true ? 'Sim' : 'Não',
+                    ),
+                    _detailRow(
+                      'Quantidade de vagas',
+                      detalhe['quantidade_vagas'],
+                    ),
+                  ] else
+                    const Text('Conta de moderador.'),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Fechar'),
+            ),
+          ],
+        ),
+      );
+    } on AdminServiceException catch (e) {
+      _showSnack(e.message, error: true);
+    } catch (_) {
+      _showSnack('Erro ao carregar detalhes do usuário.', error: true);
+    }
+  }
+
+  Future<void> _abrirDocumentoVerificacao(int id) async {
+    try {
+      final bytes = await _service.documentoVerificacaoEmpresa(id);
+      final blob = import_html.Blob([bytes], 'application/pdf');
+      final url = import_html.Url.createObjectUrlFromBlob(blob);
+      import_html.window.open(url, '_blank');
+      Future.delayed(const Duration(seconds: 30), () {
+        import_html.Url.revokeObjectUrl(url);
+      });
+    } on AdminServiceException catch (e) {
+      _showSnack(e.message, error: true);
+    } catch (_) {
+      _showSnack('Erro ao abrir documento de verificação.', error: true);
+    }
+  }
+
+  Future<void> _aprovarEmpresa(int id) async {
+    final ok = await _confirmar(
+      'Aprovar verificação',
+      'Deseja aprovar a verificação desta empresa?',
+    );
+    if (!ok) return;
+
+    await _executarAcao(
+      () => _service.decidirVerificacaoEmpresa(id, 'aprovar'),
+      'Empresa aprovada com sucesso.',
+    );
+  }
+
+  Future<void> _rejeitarEmpresa(int id) async {
+    final motivoController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final motivo = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rejeitar verificação'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: motivoController,
+            minLines: 3,
+            maxLines: 5,
+            decoration: const InputDecoration(
+              labelText: 'Motivo',
+              hintText: 'Informe o motivo da rejeição',
+            ),
+            validator: (value) => value == null || value.trim().isEmpty
+                ? 'Informe o motivo.'
+                : null,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (!(formKey.currentState?.validate() ?? false)) return;
+              Navigator.of(context).pop(motivoController.text.trim());
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Rejeitar'),
+          ),
+        ],
+      ),
+    );
+
+    motivoController.dispose();
+    if (motivo == null) return;
+
+    await _executarAcao(
+      () => _service.decidirVerificacaoEmpresa(id, 'rejeitar', motivo: motivo),
+      'Verificação rejeitada com sucesso.',
+    );
+  }
+
+  Future<void> _abrirDetalheEmpresa(int id) async {
+    try {
+      final detalhe = await _service.empresaDetalhe(id);
+      if (!mounted) return;
+      final vagas = detalhe['vagas'] is List ? detalhe['vagas'] as List : [];
+      final status = _statusVerificacao(detalhe);
+      final documentoEnviado = detalhe['documento_enviado'] == true;
+
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(detalhe['nome_exibicao'] ?? 'Detalhes da empresa'),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _detailRow('Email', detalhe['email']),
+                  _detailRow('CNPJ', _maskCnpj(detalhe['cnpj'])),
+                  _detailRow('Descrição', detalhe['descricao']),
+                  _detailRow(
+                    'Localização',
+                    '${detalhe['latitude'] ?? 'sem latitude'} / ${detalhe['longitude'] ?? 'sem longitude'}',
+                  ),
+                  _detailRow(
+                    'Verificada',
+                    detalhe['verificada'] == true ? 'Sim' : 'Não',
+                  ),
+                  _detailRow(
+                    'Situação da verificação',
+                    _statusVerificacaoLabel(status),
+                  ),
+                  _detailRow('Documento', detalhe['documento_nome_original']),
+                  _detailRow(
+                    'Solicitada em',
+                    _formatDate(detalhe['verificacao_solicitada_em']),
+                  ),
+                  _detailRow(
+                    'Analisada em',
+                    _formatDate(detalhe['verificacao_analisada_em']),
+                  ),
+                  _detailRow(
+                    'Motivo da rejeição',
+                    detalhe['verificacao_motivo_rejeicao'],
+                  ),
+                  _detailRow(
+                    'Quantidade de vagas',
+                    detalhe['quantidade_vagas'],
+                  ),
+                  _detailRow('Criada em', _formatDate(detalhe['criado_em'])),
+                  _detailRow(
+                    'Atualizada em',
+                    _formatDate(detalhe['atualizado_em']),
+                  ),
+                  const Divider(height: 24),
+                  const Text(
+                    'Vagas',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  if (vagas.isEmpty)
+                    const Text('Nenhuma vaga cadastrada.')
+                  else
+                    ...vagas.map(
+                      (vaga) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(vaga['titulo'] ?? 'Sem título'),
+                        subtitle: Text(
+                          '${vaga['modalidade'] ?? 'Sem modalidade'} - ${_isVagaAtiva(vaga) ? 'Ativa' : 'Arquivada'}',
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: documentoEnviado
+                  ? () => _abrirDocumentoVerificacao(id)
+                  : null,
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const Text('Ver documento'),
+            ),
+            TextButton.icon(
+              onPressed: documentoEnviado && status != 'aprovada'
+                  ? () {
+                      Navigator.of(context).pop();
+                      _aprovarEmpresa(id);
+                    }
+                  : null,
+              icon: const Icon(Icons.verified),
+              label: const Text('Aprovar'),
+            ),
+            TextButton.icon(
+              onPressed: status != 'aprovada'
+                  ? () {
+                      Navigator.of(context).pop();
+                      _rejeitarEmpresa(id);
+                    }
+                  : null,
+              icon: const Icon(Icons.cancel_outlined),
+              label: const Text('Rejeitar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Fechar'),
+            ),
+          ],
+        ),
+      );
+    } on AdminServiceException catch (e) {
+      _showSnack(e.message, error: true);
+    } catch (_) {
+      _showSnack('Erro ao carregar detalhes da empresa.', error: true);
+    }
+  }
+
+  Widget _detailRow(String label, dynamic value) {
+    final display = value == null || value.toString().trim().isEmpty
+        ? 'Não informado'
+        : value.toString();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(color: Color(0xFF1F2937), fontSize: 14),
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextSpan(text: display),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _skillWrap(dynamic habilidades) {
+    final items = habilidades is List ? habilidades : const [];
+    if (items.isEmpty) return const Text('Nenhuma habilidade selecionada.');
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: items
+          .map(
+            (habilidade) => Chip(
+              label: Text(habilidade['nome']?.toString() ?? 'Sem nome'),
+              backgroundColor: const Color(0xFFEDE9FE),
+            ),
+          )
+          .toList(),
+    );
+  }
+
   Widget _buildSectionHeader(String title, String subtitle, {Widget? action}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
@@ -990,7 +1402,7 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
                   .map(
                     (child) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: child,
+                      child: _unwrapExpanded(child),
                     ),
                   )
                   .toList(),
@@ -1013,6 +1425,13 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
     );
   }
 
+  Widget _unwrapExpanded(Widget child) {
+    if (child is Expanded) {
+      return SizedBox(width: double.infinity, child: child.child);
+    }
+    return child;
+  }
+
   Widget _searchField(
     TextEditingController controller,
     String label,
@@ -1030,6 +1449,55 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
         ),
       ),
       onSubmitted: (_) => onSearch(),
+    );
+  }
+
+  Widget _empresaStatusFilter() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        ChoiceChip(
+          label: const Text('Todas'),
+          selected: _empresaStatusFiltro == null,
+          onSelected: (_) {
+            setState(() => _empresaStatusFiltro = null);
+            _carregarAbaAtual();
+          },
+        ),
+        ChoiceChip(
+          label: const Text('Pendentes'),
+          selected: _empresaStatusFiltro == 'pendente',
+          onSelected: (_) {
+            setState(() => _empresaStatusFiltro = 'pendente');
+            _carregarAbaAtual();
+          },
+        ),
+        ChoiceChip(
+          label: const Text('Aprovadas'),
+          selected: _empresaStatusFiltro == 'aprovada',
+          onSelected: (_) {
+            setState(() => _empresaStatusFiltro = 'aprovada');
+            _carregarAbaAtual();
+          },
+        ),
+        ChoiceChip(
+          label: const Text('Rejeitadas'),
+          selected: _empresaStatusFiltro == 'rejeitada',
+          onSelected: (_) {
+            setState(() => _empresaStatusFiltro = 'rejeitada');
+            _carregarAbaAtual();
+          },
+        ),
+        ChoiceChip(
+          label: const Text('Não solicitadas'),
+          selected: _empresaStatusFiltro == 'nao_solicitada',
+          onSelected: (_) {
+            setState(() => _empresaStatusFiltro = 'nao_solicitada');
+            _carregarAbaAtual();
+          },
+        ),
+      ],
     );
   }
 

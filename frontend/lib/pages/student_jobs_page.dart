@@ -554,6 +554,12 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
         'Empresa não informada';
   }
 
+  bool empresaVerificada(dynamic vaga) {
+    final empresa = vaga['empresa'];
+    if (empresa == null) return false;
+    return empresa['verificada'] == true || empresa['verificada'] == 1;
+  }
+
   String labelStatusCandidatura(String status) {
     switch (status) {
       case 'PENDENTE':
@@ -799,14 +805,31 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            nomeEmpresa(vaga),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF6B7280),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  nomeEmpresa(vaga),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Color(0xFF6B7280),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (empresaVerificada(vaga)) ...[
+                                const SizedBox(width: 6),
+                                const Tooltip(
+                                  message: 'Empresa verificada',
+                                  child: Icon(
+                                    Icons.verified,
+                                    color: Colors.blue,
+                                    size: 16,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),

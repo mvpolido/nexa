@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -58,6 +59,10 @@ class AdminService {
       return data;
     }
 
+    debugPrint(
+      'AdminService falhou: ${response.request?.method} ${response.request?.url} -> ${response.statusCode}',
+    );
+
     final fallback = switch (response.statusCode) {
       401 => 'Sessão expirada. Faça login novamente.',
       403 => 'Você não tem permissão para realizar esta ação.',
@@ -108,6 +113,23 @@ class AdminService {
     return _handle(response);
   }
 
+  Future<http.Response> _getRaw(
+    String path, [
+    Map<String, String?> query = const {},
+  ]) async {
+    final response = await http.get(
+      _uri(path, query),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return response;
+    }
+
+    await _handle(response);
+    return response;
+  }
+
   Future<Map<String, dynamic>> dashboardStats() async {
     final data = await _get('/admin/dashboard/stats');
     return data is Map<String, dynamic> ? data : <String, dynamic>{};
@@ -118,15 +140,32 @@ class AdminService {
       'busca': busca,
       'perfil': perfil,
     });
+    if (data is Map && data['usuarios'] is List) return data['usuarios'];
     return data is List ? data : <dynamic>[];
   }
 
-  Future<List<dynamic>> empresas({String? busca, bool? verificada}) async {
+  Future<Map<String, dynamic>> usuarioDetalhe(int id) async {
+    final data = await _get('/admin/usuarios/$id');
+    return data is Map<String, dynamic> ? data : <String, dynamic>{};
+  }
+
+  Future<List<dynamic>> empresas({
+    String? busca,
+    bool? verificada,
+    String? statusVerificacao,
+  }) async {
     final data = await _get('/admin/empresas', {
       'busca': busca,
       'verificada': verificada?.toString(),
+      'status_verificacao': statusVerificacao,
     });
+    if (data is Map && data['empresas'] is List) return data['empresas'];
     return data is List ? data : <dynamic>[];
+  }
+
+  Future<Map<String, dynamic>> empresaDetalhe(int id) async {
+    final data = await _get('/admin/empresas/$id');
+    return data is Map<String, dynamic> ? data : <String, dynamic>{};
   }
 
   Future<List<dynamic>> vagas({String? busca, bool? ativo}) async {
@@ -147,6 +186,22 @@ class AdminService {
 
   Future<void> verificarEmpresa(int id, bool verificada) async {
     await _patch('/admin/empresas/$id/verificar', {'verificada': verificada});
+  }
+
+  Future<List<int>> documentoVerificacaoEmpresa(int id) async {
+    final response = await _getRaw('/admin/empresas/$id/documento-verificacao');
+    return response.bodyBytes;
+  }
+
+  Future<void> decidirVerificacaoEmpresa(
+    int id,
+    String decisao, {
+    String? motivo,
+  }) async {
+    await _patch('/admin/empresas/$id/verificacao', {
+      'decisao': decisao,
+      if (motivo != null) 'motivo': motivo,
+    });
   }
 
   Future<void> criarHabilidade(String nome, String area) async {

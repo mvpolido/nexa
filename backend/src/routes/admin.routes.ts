@@ -11,10 +11,20 @@ adminRoutes.use(authMiddleware, adminMiddleware);
 adminRoutes.get("/dashboard/stats", AdminController.dashboardStats);
 
 adminRoutes.get("/usuarios", AdminController.listarUsuarios);
+adminRoutes.get("/usuarios/:id", AdminController.obterUsuario);
 adminRoutes.delete("/usuarios/:id", AdminController.deletarUsuario);
 
 adminRoutes.get("/empresas", AdminController.listarEmpresas);
+adminRoutes.get(
+  "/empresas/:id/documento-verificacao",
+  AdminController.documentoVerificacaoEmpresa
+);
+adminRoutes.patch(
+  "/empresas/:id/verificacao",
+  AdminController.decidirVerificacaoEmpresa
+);
 adminRoutes.patch("/empresas/:id/verificar", AdminController.verificarEmpresa);
+adminRoutes.get("/empresas/:id", AdminController.obterEmpresa);
 
 adminRoutes.get("/vagas", AdminController.listarVagas);
 adminRoutes.delete("/vagas/:id", AdminController.deletarVaga);

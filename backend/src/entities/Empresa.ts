@@ -3,6 +3,13 @@ import { Usuario } from "./Usuario";
 import { Vaga } from "./Vaga";
 import { Avaliacao } from "./Avaliacao";
 
+export enum EmpresaStatusVerificacao {
+  NAO_SOLICITADA = "nao_solicitada",
+  PENDENTE = "pendente",
+  APROVADA = "aprovada",
+  REJEITADA = "rejeitada",
+}
+
 @Entity("empresa")
 export class Empresa {
   @PrimaryColumn()
@@ -22,6 +29,28 @@ export class Empresa {
 
   @Column({ type: "boolean", default: false })
   verificada!: boolean;
+
+  @Column({
+    type: "varchar",
+    length: 20,
+    default: EmpresaStatusVerificacao.NAO_SOLICITADA,
+  })
+  status_verificacao!: EmpresaStatusVerificacao;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  documento_verificacao_path?: string | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  documento_verificacao_nome_original?: string | null;
+
+  @Column({ type: "timestamp", nullable: true })
+  verificacao_solicitada_em?: Date | null;
+
+  @Column({ type: "timestamp", nullable: true })
+  verificacao_analisada_em?: Date | null;
+
+  @Column({ type: "text", nullable: true })
+  verificacao_motivo_rejeicao?: string | null;
 
   @OneToOne(() => Usuario, (usuario) => usuario.empresa, { onDelete: "CASCADE" })
   @JoinColumn({ name: "id" })

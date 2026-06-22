@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
+import fs from "fs";
+import path from "path";
 import { Brackets } from "typeorm";
 import { AppDataSource } from "../data-source";
 import { Aluno } from "../entities/Aluno";
 import { AlunoHabilidade } from "../entities/AlunoHabilidade";
 import { Candidatura } from "../entities/Candidatura";
-import { Empresa } from "../entities/Empresa";
+import { Empresa, EmpresaStatusVerificacao } from "../entities/Empresa";
 import { Habilidade } from "../entities/Habilidade";
 import { Mensagem } from "../entities/Mensagem";
 import { Usuario, UsuarioPerfil } from "../entities/Usuario";
@@ -13,6 +15,7 @@ import { VagaHabilidade } from "../entities/VagaHabilidade";
 import { Avaliacao } from "../entities/Avaliacao";
 import { Notificacao } from "../entities/Notificacao";
 import { HabilidadeController } from "./HabilidadeController";
+import { verificacaoEmpresaUploadPath } from "../config/verificacaoEmpresaMulter";
 
 function parseBooleanFilter(value: unknown): boolean | null {
   if (value === "true") return true;
@@ -30,6 +33,78 @@ function parsePerfil(value: unknown): UsuarioPerfil | null {
 function parseId(value: unknown): number | null {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function parseStatusVerificacao(value: unknown): EmpresaStatusVerificacao | null {
+  if (typeof value !== "string") return null;
+  return Object.values(EmpresaStatusVerificacao).includes(
+    value as EmpresaStatusVerificacao
+  )
+    ? (value as EmpresaStatusVerificacao)
+    : null;
+}
+
+function nomeArquivoSeguro(value?: string | null) {
+  if (!value) return "documento-verificacao.pdf";
+  return path.basename(value).replace(/[\r\n"]/g, "_") || "documento-verificacao.pdf";
+}
+
+function empresaSemDocumentoPath(empresa: Empresa) {
+  const { documento_verificacao_path: _documentoPath, ...segura } = empresa as any;
+  return segura;
+}
+
+async function aplicarDecisaoVerificacao(
+  empresaId: number,
+  decisao: "aprovar" | "rejeitar",
+  motivo?: string
+) {
+  const empresaRepository = AppDataSource.getRepository(Empresa);
+  const empresa = await empresaRepository.findOne({
+    where: { id: empresaId },
+    relations: ["usuario"],
+  });
+
+  if (!empresa) {
+    return { status: 404, body: { message: "Empresa não encontrada." } };
+  }
+
+  if (decisao === "aprovar") {
+    if (!empresa.documento_verificacao_path) {
+      return {
+        status: 409,
+        body: { message: "Não é possível aprovar sem documento PDF enviado." },
+      };
+    }
+
+    empresa.verificada = true;
+    empresa.status_verificacao = EmpresaStatusVerificacao.APROVADA;
+    empresa.verificacao_analisada_em = new Date();
+    empresa.verificacao_motivo_rejeicao = null;
+  } else {
+    const motivoNormalizado = typeof motivo === "string" ? motivo.trim() : "";
+
+    if (!motivoNormalizado) {
+      return {
+        status: 400,
+        body: { message: "Informe o motivo da rejeição." },
+      };
+    }
+
+    empresa.verificada = false;
+    empresa.status_verificacao = EmpresaStatusVerificacao.REJEITADA;
+    empresa.verificacao_analisada_em = new Date();
+    empresa.verificacao_motivo_rejeicao = motivoNormalizado;
+  }
+
+  const atualizada = await empresaRepository.save(empresa);
+  return {
+    status: 200,
+    body: {
+      message: "Verificação analisada com sucesso.",
+      empresa: empresaSemDocumentoPath(atualizada),
+    },
+  };
 }
 
 export class AdminController {
@@ -115,7 +190,7 @@ export class AdminController {
       }
 
       const usuarios = await query.getMany();
-      return res.status(200).json(usuarios);
+      return res.status(200).json({ usuarios });
     } catch (error: any) {
       return res.status(500).json({
         message: "Erro ao listar usuários.",
@@ -124,14 +199,110 @@ export class AdminController {
     }
   }
 
+  static async obterUsuario(req: Request, res: Response): Promise<Response> {
+    try {
+      const usuarioId = parseId(req.params.id);
+      if (!usuarioId) {
+        return res.status(400).json({ message: "ID de usuário inválido." });
+      }
+
+      const usuario = await AppDataSource.getRepository(Usuario).findOne({
+        where: { id: usuarioId },
+        select: {
+          id: true,
+          email: true,
+          nome_exibicao: true,
+          perfil: true,
+          criado_em: true,
+          atualizado_em: true,
+        },
+      });
+
+      if (!usuario) {
+        return res.status(404).json({ message: "Usuário não encontrado." });
+      }
+
+      const dadosComuns = {
+        id: usuario.id,
+        nome_exibicao: usuario.nome_exibicao,
+        nome: usuario.nome_exibicao,
+        email: usuario.email,
+        perfil: usuario.perfil,
+        criado_em: usuario.criado_em,
+        atualizado_em: usuario.atualizado_em,
+      };
+
+      if (usuario.perfil === UsuarioPerfil.ALUNO) {
+        const aluno = await AppDataSource.getRepository(Aluno).findOne({
+          where: { id: usuario.id },
+          relations: ["alunoHabilidades", "alunoHabilidades.habilidade"],
+        });
+
+        return res.status(200).json({
+          ...dadosComuns,
+          cpf: aluno?.cpf ?? null,
+          curso: aluno?.curso ?? null,
+          instituicao: aluno?.instituicao ?? null,
+          ano_conclusao: aluno?.ano_conclusao ?? null,
+          cep: aluno?.cep ?? null,
+          endereco: aluno?.endereco ?? null,
+          numero: aluno?.numero ?? null,
+          habilidades:
+            aluno?.alunoHabilidades?.map((relacao) => ({
+              id: relacao.habilidade?.id,
+              nome: relacao.habilidade?.nome,
+              area: relacao.habilidade?.area,
+            })) ?? [],
+          possui_curriculo: Boolean(aluno?.url_curriculo),
+        });
+      }
+
+      if (usuario.perfil === UsuarioPerfil.EMPRESA) {
+        const empresa = await AppDataSource.getRepository(Empresa).findOne({
+          where: { id: usuario.id },
+        });
+        const quantidadeVagas = await AppDataSource.getRepository(Vaga).count({
+          where: { empresa_id: usuario.id },
+        });
+
+        return res.status(200).json({
+          ...dadosComuns,
+          cnpj: empresa?.cnpj ?? null,
+          descricao: empresa?.descricao ?? null,
+          latitude: empresa?.latitude ?? null,
+          longitude: empresa?.longitude ?? null,
+          verificada: empresa?.verificada ?? false,
+          quantidade_vagas: quantidadeVagas,
+        });
+      }
+
+      return res.status(200).json(dadosComuns);
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao buscar usuário.",
+        error: error.message,
+      });
+    }
+  }
+
   static async listarEmpresas(req: Request, res: Response): Promise<Response> {
     try {
-      const { busca, verificada } = req.query;
+      const { busca, verificada, status_verificacao } = req.query;
       const verificadaFiltro =
         verificada === undefined ? null : parseBooleanFilter(verificada);
+      const statusFiltro =
+        status_verificacao === undefined
+          ? null
+          : parseStatusVerificacao(status_verificacao);
 
       if (verificada !== undefined && verificadaFiltro === null) {
         return res.status(400).json({ message: "Filtro verificada inválido." });
+      }
+
+      if (status_verificacao !== undefined && !statusFiltro) {
+        return res.status(400).json({
+          message: "Filtro status_verificacao inválido.",
+        });
       }
 
       const query = AppDataSource.getRepository(Empresa)
@@ -143,6 +314,12 @@ export class AdminController {
       if (verificadaFiltro !== null) {
         query.andWhere("empresa.verificada = :verificada", {
           verificada: verificadaFiltro,
+        });
+      }
+
+      if (statusFiltro !== null) {
+        query.andWhere("empresa.status_verificacao = :statusVerificacao", {
+          statusVerificacao: statusFiltro,
         });
       }
 
@@ -166,13 +343,25 @@ export class AdminController {
       }
 
       const empresas = await query.getMany();
-      return res.status(200).json(
-        empresas.map((empresa: any) => ({
+      return res.status(200).json({
+        empresas: empresas.map((empresa: any) => ({
           id: empresa.id,
+          nome_exibicao: empresa.usuario?.nome_exibicao ?? null,
+          email: empresa.usuario?.email ?? null,
           cnpj: empresa.cnpj,
           descricao: empresa.descricao,
           verificada: empresa.verificada,
-          quantidadeVagas: empresa.quantidadeVagas ?? 0,
+          status_verificacao:
+            empresa.status_verificacao ?? EmpresaStatusVerificacao.NAO_SOLICITADA,
+          documento_enviado: Boolean(empresa.documento_verificacao_path),
+          documento_nome_original:
+            empresa.documento_verificacao_nome_original ?? null,
+          verificacao_solicitada_em: empresa.verificacao_solicitada_em ?? null,
+          verificacao_analisada_em: empresa.verificacao_analisada_em ?? null,
+          verificacao_motivo_rejeicao:
+            empresa.verificacao_motivo_rejeicao ?? null,
+          quantidade_vagas: empresa.quantidadeVagas ?? 0,
+          criado_em: empresa.usuario?.criado_em ?? null,
           usuario: empresa.usuario
             ? {
                 id: empresa.usuario.id,
@@ -180,11 +369,86 @@ export class AdminController {
                 email: empresa.usuario.email,
               }
             : null,
-        }))
-      );
+        })),
+      });
     } catch (error: any) {
       return res.status(500).json({
         message: "Erro ao listar empresas.",
+        error: error.message,
+      });
+    }
+  }
+
+  static async obterEmpresa(req: Request, res: Response): Promise<Response> {
+    try {
+      const empresaId = parseId(req.params.id);
+      if (!empresaId) {
+        return res.status(400).json({ message: "ID de empresa inválido." });
+      }
+
+      const empresa = await AppDataSource.getRepository(Empresa).findOne({
+        where: { id: empresaId },
+        relations: ["usuario"],
+      });
+
+      if (!empresa) {
+        return res.status(404).json({ message: "Empresa não encontrada." });
+      }
+
+      const vagas = await AppDataSource.getRepository(Vaga).find({
+        where: { empresa_id: empresa.id },
+        order: { criado_em: "DESC" },
+        select: {
+          id: true,
+          titulo: true,
+          modalidade: true,
+          ativo: true,
+          criado_em: true,
+        },
+      });
+
+      return res.status(200).json({
+        id: empresa.id,
+        nome_exibicao: empresa.usuario?.nome_exibicao ?? null,
+        email: empresa.usuario?.email ?? null,
+        cnpj: empresa.cnpj ?? null,
+        descricao: empresa.descricao ?? null,
+        latitude: empresa.latitude ?? null,
+        longitude: empresa.longitude ?? null,
+        verificada: empresa.verificada,
+        status_verificacao:
+          empresa.status_verificacao ?? EmpresaStatusVerificacao.NAO_SOLICITADA,
+        documento_enviado: Boolean(empresa.documento_verificacao_path),
+        documento_nome_original:
+          empresa.documento_verificacao_nome_original ?? null,
+        verificacao_solicitada_em: empresa.verificacao_solicitada_em ?? null,
+        verificacao_analisada_em: empresa.verificacao_analisada_em ?? null,
+        verificacao_motivo_rejeicao:
+          empresa.verificacao_motivo_rejeicao ?? null,
+        quantidade_vagas: vagas.length,
+        criado_em: empresa.usuario?.criado_em ?? null,
+        atualizado_em: empresa.usuario?.atualizado_em ?? null,
+        usuario: empresa.usuario
+          ? {
+              id: empresa.usuario.id,
+              nome_exibicao: empresa.usuario.nome_exibicao,
+              email: empresa.usuario.email,
+              perfil: empresa.usuario.perfil,
+              criado_em: empresa.usuario.criado_em,
+              atualizado_em: empresa.usuario.atualizado_em,
+            }
+          : null,
+        vagas: vagas.map((vaga) => ({
+          id: vaga.id,
+          titulo: vaga.titulo,
+          modalidade: vaga.modalidade,
+          ativo: vaga.ativo,
+          criado_em: vaga.criado_em,
+        })),
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao buscar empresa.",
         error: error.message,
       });
     }
@@ -203,28 +467,90 @@ export class AdminController {
         });
       }
 
-      const empresaRepository = AppDataSource.getRepository(Empresa);
-      const empresa = await empresaRepository.findOne({
+      const resultado = await aplicarDecisaoVerificacao(
+        empresaId,
+        req.body.verificada ? "aprovar" : "rejeitar",
+        req.body.motivo || "Verificação removida pelo moderador."
+      );
+
+      return res.status(resultado.status).json(resultado.body);
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao atualizar verificação da empresa.",
+        error: error.message,
+      });
+    }
+  }
+
+  static async documentoVerificacaoEmpresa(
+    req: Request,
+    res: Response
+  ): Promise<Response | void> {
+    try {
+      const empresaId = parseId(req.params.id);
+      if (!empresaId) {
+        return res.status(400).json({ message: "ID de empresa inválido." });
+      }
+
+      const empresa = await AppDataSource.getRepository(Empresa).findOne({
         where: { id: empresaId },
-        relations: ["usuario"],
       });
 
       if (!empresa) {
         return res.status(404).json({ message: "Empresa não encontrada." });
       }
 
-      empresa.verificada = req.body.verificada;
-      await empresaRepository.save(empresa);
+      const filename = empresa.documento_verificacao_path;
+      if (!filename || path.basename(filename) !== filename) {
+        return res.status(404).json({ message: "Documento não encontrado." });
+      }
 
-      return res.status(200).json({
-        message: empresa.verificada
-          ? "Empresa verificada com sucesso."
-          : "Verificação da empresa removida com sucesso.",
-        empresa,
-      });
+      const filePath = path.resolve(verificacaoEmpresaUploadPath, filename);
+      const basePath = path.resolve(verificacaoEmpresaUploadPath);
+
+      if (!filePath.startsWith(`${basePath}${path.sep}`) || !fs.existsSync(filePath)) {
+        return res.status(404).json({ message: "Documento não encontrado." });
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${nomeArquivoSeguro(
+          empresa.documento_verificacao_nome_original
+        )}"`
+      );
+
+      return res.sendFile(filePath);
     } catch (error: any) {
       return res.status(500).json({
-        message: "Erro ao atualizar verificação da empresa.",
+        message: "Erro ao abrir documento de verificação.",
+        error: error.message,
+      });
+    }
+  }
+
+  static async decidirVerificacaoEmpresa(
+    req: Request,
+    res: Response
+  ): Promise<Response> {
+    try {
+      const empresaId = parseId(req.params.id);
+      if (!empresaId) {
+        return res.status(400).json({ message: "ID de empresa inválido." });
+      }
+
+      const { decisao, motivo } = req.body;
+      if (decisao !== "aprovar" && decisao !== "rejeitar") {
+        return res.status(400).json({
+          message: "Decisão inválida. Use aprovar ou rejeitar.",
+        });
+      }
+
+      const resultado = await aplicarDecisaoVerificacao(empresaId, decisao, motivo);
+      return res.status(resultado.status).json(resultado.body);
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao analisar verificação da empresa.",
         error: error.message,
       });
     }
