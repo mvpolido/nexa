@@ -1100,7 +1100,9 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
             },
           );
 
-          return Column(
+          return SizedBox(
+            width: constraints.maxWidth,
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
@@ -1160,7 +1162,8 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
                 else
                   ..._instituicoes.map(_buildInstituicaoCard),
               ],
-            );
+            ),
+          );
         },
       ),
     );
@@ -1254,7 +1257,9 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
             },
           );
 
-          return Column(
+          return SizedBox(
+            width: constraints.maxWidth,
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
@@ -1314,7 +1319,8 @@ class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
                 else
                   ..._cursos.map(_buildCursoCard),
               ],
-            );
+            ),
+          );
         },
       ),
     );
