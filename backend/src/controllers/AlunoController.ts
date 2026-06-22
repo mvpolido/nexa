@@ -10,7 +10,7 @@ import { Empresa } from "../entities/Empresa";
 import { Habilidade } from "../entities/Habilidade";
 import { Usuario, UsuarioPerfil } from "../entities/Usuario";
 import { geocodificarEndereco } from "../utils/geocoding";
-import { coordenadasValidas } from "../utils/coordinates";
+import { calcularDistanciaKm, coordenadasValidas } from "../utils/distance";
 import {
   mensagemAnoConclusaoInvalido,
   parseAnoConclusao,
@@ -18,6 +18,30 @@ import {
 import { catalogoPodeManterValorAntigo } from "./CatalogoController";
 
 export class AlunoController {
+  private static alertarCoordenadasEnviadasSuspeitas(
+    latitudeEnviada: unknown,
+    longitudeEnviada: unknown,
+    latitudeConfirmada: number,
+    longitudeConfirmada: number
+  ) {
+    if (!coordenadasValidas(latitudeEnviada, longitudeEnviada)) return;
+
+    const diferencaKm = calcularDistanciaKm(
+      latitudeEnviada,
+      longitudeEnviada,
+      latitudeConfirmada,
+      longitudeConfirmada
+    );
+
+    if (diferencaKm !== null && diferencaKm > 5) {
+      console.warn(
+        `Edição de aluno: coordenadas enviadas pelo cliente divergem da geocodificação em ${diferencaKm.toFixed(
+          1
+        )} km. Valor enviado ignorado.`
+      );
+    }
+  }
+
   private static async empresaPodeAcessarAluno(
     usuarioLogadoId: number,
     alunoId: number
@@ -140,26 +164,6 @@ export class AlunoController {
       const enderecoFoiAlterado = ["cep", "endereco", "numero"].some((campo) =>
         Object.prototype.hasOwnProperty.call(req.body, campo)
       );
-      const latitudeEnviada = Object.prototype.hasOwnProperty.call(
-        req.body,
-        "latitude"
-      );
-      const longitudeEnviada = Object.prototype.hasOwnProperty.call(
-        req.body,
-        "longitude"
-      );
-
-      if (latitudeEnviada || longitudeEnviada) {
-        if (!coordenadasValidas(req.body.latitude, req.body.longitude)) {
-          return res.status(400).json({
-            message: "Latitude e longitude devem ser coordenadas válidas.",
-          });
-        }
-
-        aluno.latitude = Number(req.body.latitude);
-        aluno.longitude = Number(req.body.longitude);
-      }
-
       const camposAluno: (keyof Aluno)[] = [
         "cep",
         "endereco",
@@ -215,7 +219,7 @@ export class AlunoController {
         aluno.ano_conclusao = anoConclusao;
       }
 
-      if (!latitudeEnviada && !longitudeEnviada && enderecoFoiAlterado) {
+      if (enderecoFoiAlterado) {
         const coordenadas = await geocodificarEndereco({
           cep: aluno.cep,
           endereco: aluno.endereco,
@@ -231,6 +235,12 @@ export class AlunoController {
           });
         }
 
+        AlunoController.alertarCoordenadasEnviadasSuspeitas(
+          req.body.latitude,
+          req.body.longitude,
+          coordenadas.latitude,
+          coordenadas.longitude
+        );
         (aluno as any).latitude = coordenadas.latitude;
         (aluno as any).longitude = coordenadas.longitude;
       }

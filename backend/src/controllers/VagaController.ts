@@ -11,10 +11,9 @@ import { Notificacao } from "../entities/Notificacao";
 import { calcularMatchPercent } from "../services/matchService";
 import { geocodificarEndereco } from "../utils/geocoding";
 import {
-  calcularDistanciaKmOuNull,
+  calcularDistanciaKm,
   coordenadasValidas,
-  parseCoordenada,
-} from "../utils/coordinates";
+} from "../utils/distance";
 
 export class VagaController {
   private static textoPreenchido(value: unknown) {
@@ -34,13 +33,6 @@ export class VagaController {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/\s+/g, " ");
-  }
-
-  private static normalizarCoordenadaOpcional(value: unknown) {
-    if (value === undefined) return undefined;
-    if (value === null || value === "") return null;
-
-    return parseCoordenada(value) ?? NaN;
   }
 
   private static normalizarListaCursos(value: unknown) {
@@ -125,10 +117,6 @@ export class VagaController {
     );
   }
 
-  private static coordenadasForamInformadas(latitude: unknown, longitude: unknown) {
-    return latitude !== undefined || longitude !== undefined;
-  }
-
   private static enderecoMinimoPreenchido(dados: {
     cep?: unknown;
     endereco?: unknown;
@@ -151,7 +139,32 @@ export class VagaController {
     destinoLat?: unknown,
     destinoLng?: unknown
   ) {
-    return calcularDistanciaKmOuNull(origemLat, origemLng, destinoLat, destinoLng);
+    return calcularDistanciaKm(origemLat, origemLng, destinoLat, destinoLng);
+  }
+
+  private static alertarCoordenadasEnviadasSuspeitas(
+    origem: string,
+    latitudeEnviada: unknown,
+    longitudeEnviada: unknown,
+    latitudeConfirmada: number,
+    longitudeConfirmada: number
+  ) {
+    if (!coordenadasValidas(latitudeEnviada, longitudeEnviada)) return;
+
+    const diferencaKm = calcularDistanciaKm(
+      latitudeEnviada,
+      longitudeEnviada,
+      latitudeConfirmada,
+      longitudeConfirmada
+    );
+
+    if (diferencaKm !== null && diferencaKm > 5) {
+      console.warn(
+        `${origem}: coordenadas enviadas pelo cliente divergem da geocodificação em ${diferencaKm.toFixed(
+          1
+        )} km. Valor enviado ignorado.`
+      );
+    }
   }
 
   private static validarLocalizacaoVaga(dados: {
@@ -235,8 +248,6 @@ export class VagaController {
         numero,
         cidade,
         estado,
-        latitude,
-        longitude,
         habilidadeIds,
       } = req.body;
 
@@ -261,43 +272,12 @@ export class VagaController {
         });
       }
 
-      const latitudeNormalizada =
-        VagaController.normalizarCoordenadaOpcional(latitude);
-      const longitudeNormalizada =
-        VagaController.normalizarCoordenadaOpcional(longitude);
-
-      if (
-        Number.isNaN(latitudeNormalizada) ||
-        Number.isNaN(longitudeNormalizada)
-      ) {
-        return res.status(400).json({
-          message: "Latitude e longitude devem ser coordenadas válidas.",
-        });
-      }
-
-      if (
-        VagaController.coordenadasForamInformadas(
-          latitudeNormalizada,
-          longitudeNormalizada
-        ) &&
-        !coordenadasValidas(
-          latitudeNormalizada,
-          longitudeNormalizada
-        )
-      ) {
-        return res.status(400).json({
-          message: "Latitude e longitude devem ser coordenadas válidas.",
-        });
-      }
-
       const erroLocalizacao = VagaController.validarLocalizacaoVaga({
         modalidade,
         cep,
         endereco,
         cidade,
         estado,
-        latitude: latitudeNormalizada,
-        longitude: longitudeNormalizada,
       });
 
       if (erroLocalizacao) {
@@ -325,6 +305,13 @@ export class VagaController {
 
         latitudeFinal = coordenadas.latitude;
         longitudeFinal = coordenadas.longitude;
+        VagaController.alertarCoordenadasEnviadasSuspeitas(
+          "Criação de vaga",
+          req.body.latitude,
+          req.body.longitude,
+          latitudeFinal,
+          longitudeFinal
+        );
       }
 
       if (habilidadeIds !== undefined && !Array.isArray(habilidadeIds)) {
@@ -745,8 +732,6 @@ export class VagaController {
         numero,
         cidade,
         estado,
-        latitude,
-        longitude,
         habilidadeIds,
       } = req.body;
 
@@ -759,20 +744,6 @@ export class VagaController {
       if (habilidadeIds !== undefined && !Array.isArray(habilidadeIds)) {
         return res.status(400).json({
           message: "O campo habilidadeIds deve ser um array.",
-        });
-      }
-
-      const latitudeNormalizada =
-        VagaController.normalizarCoordenadaOpcional(latitude);
-      const longitudeNormalizada =
-        VagaController.normalizarCoordenadaOpcional(longitude);
-
-      if (
-        Number.isNaN(latitudeNormalizada) ||
-        Number.isNaN(longitudeNormalizada)
-      ) {
-        return res.status(400).json({
-          message: "Latitude e longitude devem ser coordenadas válidas.",
         });
       }
 
@@ -791,10 +762,8 @@ export class VagaController {
         estado === undefined
           ? vaga.estado
           : VagaController.normalizarTextoOpcional(estado);
-      const latitudeFinal =
-        latitudeNormalizada === undefined ? vaga.latitude : latitudeNormalizada;
-      const longitudeFinal =
-        longitudeNormalizada === undefined ? vaga.longitude : longitudeNormalizada;
+      const latitudeFinal = vaga.latitude;
+      const longitudeFinal = vaga.longitude;
       const numeroFinal =
         numero === undefined
           ? vaga.numero
@@ -808,18 +777,6 @@ export class VagaController {
       ].some((campo) => Object.prototype.hasOwnProperty.call(req.body, campo));
       let latitudeParaSalvar: number | null = null;
       let longitudeParaSalvar: number | null = null;
-
-      if (
-        VagaController.coordenadasForamInformadas(
-          latitudeNormalizada,
-          longitudeNormalizada
-        ) &&
-        !coordenadasValidas(latitudeFinal, longitudeFinal)
-      ) {
-        return res.status(400).json({
-          message: "Latitude e longitude devem ser coordenadas válidas.",
-        });
-      }
 
       const precisaRecalcularCoordenadas =
         modalidadeFinal !== VagaModalidade.REMOTO &&
@@ -849,6 +806,13 @@ export class VagaController {
 
         latitudeParaSalvar = coordenadas.latitude;
         longitudeParaSalvar = coordenadas.longitude;
+        VagaController.alertarCoordenadasEnviadasSuspeitas(
+          "Edição de vaga",
+          req.body.latitude,
+          req.body.longitude,
+          latitudeParaSalvar,
+          longitudeParaSalvar
+        );
       }
       const cursosForamEnviados = VagaController.bodyTemCampo(
         req.body,

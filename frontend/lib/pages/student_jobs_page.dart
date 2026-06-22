@@ -640,7 +640,7 @@ class _StudentJobsPageState extends State<StudentJobsPage> {
     final modalidade = vaga['modalidade']?.toString();
 
     if (distancia != null) {
-      return '${distancia.toStringAsFixed(1)} km';
+      return 'Distância aproximada: ${distancia.toStringAsFixed(1)} km';
     }
 
     if (modalidade == 'REMOTO') {

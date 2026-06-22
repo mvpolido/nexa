@@ -1,60 +1,210 @@
 import axios from "axios";
-import { coordenadasValidas } from "./coordinates";
+import { coordenadasValidas } from "./distance";
 
-export async function geocodificarEndereco(params: {
+type GeocodingParams = {
   cep?: string | null;
   endereco?: string | null;
   numero?: string | null;
   cidade?: string | null;
   estado?: string | null;
-}): Promise<{ latitude: number; longitude: number } | null> {
-  const endereco = params.endereco?.trim();
+};
+
+type NominatimResult = {
+  lat?: string;
+  lon?: string;
+  display_name?: string;
+  address?: Record<string, string | undefined>;
+};
+
+function normalizarTexto(value?: string | null) {
+  return (value ?? "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function normalizarCep(value?: string | null) {
+  const digits = (value ?? "").replace(/\D/g, "");
+  return digits.length === 8 ? digits : "";
+}
+
+function normalizarUf(value?: string | null) {
+  return (value ?? "").trim().toUpperCase();
+}
+
+function debugGeocoding(message: string) {
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[geocoding] ${message}`);
+  }
+}
+
+function cidadeDoResultado(address: Record<string, string | undefined>) {
+  return (
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    address.county ||
+    ""
+  );
+}
+
+function estadoDoResultado(address: Record<string, string | undefined>) {
+  const iso = address["ISO3166-2-lvl4"];
+  if (iso && iso.includes("-")) return iso.split("-").pop() ?? "";
+  return address.state_code || address.state || "";
+}
+
+function resultadoCompativel(
+  resultado: NominatimResult,
+  params: {
+    cep: string;
+    cidade?: string;
+    estado?: string;
+  }
+) {
+  const address = resultado.address ?? {};
+  const cepResultado = normalizarCep(address.postcode);
+  const cidadeResultado = normalizarTexto(cidadeDoResultado(address));
+  const estadoResultado = normalizarUf(estadoDoResultado(address));
+
+  if (params.cep && cepResultado && cepResultado !== params.cep) {
+    return {
+      ok: false,
+      motivo: `CEP divergente retornado (${cepResultado})`,
+    };
+  }
+
+  if (
+    params.cidade &&
+    cidadeResultado &&
+    cidadeResultado !== normalizarTexto(params.cidade)
+  ) {
+    return {
+      ok: false,
+      motivo: `cidade divergente retornada (${cidadeResultado})`,
+    };
+  }
+
+  if (
+    params.estado &&
+    estadoResultado &&
+    estadoResultado !== normalizarUf(params.estado)
+  ) {
+    return {
+      ok: false,
+      motivo: `estado divergente retornado (${estadoResultado})`,
+    };
+  }
+
+  return { ok: true, motivo: "compatível" };
+}
+
+async function consultarNominatim(
+  label: string,
+  params: Record<string, string | number | undefined>
+) {
+  debugGeocoding(`tentativa=${label} consulta=${JSON.stringify(params)}`);
+
+  const response = await axios.get<NominatimResult[]>(
+    "https://nominatim.openstreetmap.org/search",
+    {
+      params: {
+        format: "json",
+        addressdetails: 1,
+        limit: 5,
+        countrycodes: "br",
+        ...params,
+      },
+      headers: {
+        "User-Agent": "NexaApp/1.0 contato@nexa.local",
+      },
+      timeout: 7000,
+    }
+  );
+
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function geocodificarEndereco(
+  params: GeocodingParams
+): Promise<{ latitude: number; longitude: number } | null> {
+  const cep = normalizarCep(params.cep);
+  const rua = params.endereco?.trim();
   const numero = params.numero?.trim();
   const cidade = params.cidade?.trim();
-  const estado = params.estado?.trim();
-  const cep = params.cep?.replace(/\D/g, "");
-
-  const enderecoCompleto = [endereco, numero, cidade, estado, cep]
-    .filter((parte) => parte && parte.length > 0)
-    .join(", ");
+  const estado = normalizarUf(params.estado);
+  const street = [rua, numero].filter(Boolean).join(" ");
 
   const tentativas = [
     {
-      label: "endereco_completo",
-      busca: enderecoCompleto,
+      label: "cep_rua_numero_cidade_estado",
+      query: {
+        postalcode: cep || undefined,
+        street: street || undefined,
+        city: cidade || undefined,
+        state: estado || undefined,
+        country: "Brasil",
+      },
     },
     {
-      label: "cidade_estado_cep",
-      busca: [cidade, estado, cep].filter(Boolean).join(", "),
+      label: "cep_cidade_estado",
+      query: {
+        postalcode: cep || undefined,
+        city: cidade || undefined,
+        state: estado || undefined,
+        country: "Brasil",
+      },
     },
     {
       label: "cep",
-      busca: cep,
+      query: {
+        postalcode: cep || undefined,
+        country: "Brasil",
+      },
     },
-  ].filter((tentativa) => tentativa.busca && tentativa.busca.trim().length > 0);
+    {
+      label: "rua_cidade_estado",
+      query: {
+        street: street || undefined,
+        city: cidade || undefined,
+        state: estado || undefined,
+        country: "Brasil",
+      },
+    },
+  ].filter((tentativa) =>
+    Object.entries(tentativa.query).some(
+      ([key, value]) => key !== "country" && value !== undefined && value !== ""
+    )
+  );
 
   for (const tentativa of tentativas) {
-    try {
-      const response = await axios.get(
-        "https://nominatim.openstreetmap.org/search",
-        {
-          params: {
-            format: "json",
-            limit: 1,
-            countrycodes: "br",
-            q: `${tentativa.busca}, Brasil`,
-          },
-          headers: {
-            "User-Agent": "NexaApp/1.0 contato@nexa.local",
-          },
-          timeout: 7000,
-        }
-      );
+    let resultados: NominatimResult[] = [];
 
-      const resultado = Array.isArray(response.data) ? response.data[0] : null;
-      if (!resultado) {
-        console.warn(
-          `Geocodificação sem resultado na tentativa ${tentativa.label}.`
+    try {
+      resultados = await consultarNominatim(tentativa.label, tentativa.query);
+    } catch (error: any) {
+      console.warn(
+        `Falha na geocodificação (${tentativa.label}): ${
+          error?.code || error?.message || "erro desconhecido"
+        }`
+      );
+      continue;
+    }
+
+    for (const resultado of resultados) {
+      const compatibilidade = resultadoCompativel(resultado, {
+        cep,
+        cidade,
+        estado,
+      });
+
+      if (!compatibilidade.ok) {
+        debugGeocoding(
+          `candidato rejeitado (${tentativa.label}): ${compatibilidade.motivo}`
         );
         continue;
       }
@@ -63,19 +213,19 @@ export async function geocodificarEndereco(params: {
       const longitude = Number(resultado.lon);
 
       if (!coordenadasValidas(latitude, longitude)) {
-        console.warn(
-          `Geocodificação retornou coordenadas inválidas na tentativa ${tentativa.label}.`
+        debugGeocoding(
+          `candidato rejeitado (${tentativa.label}): coordenadas inválidas`
         );
         continue;
       }
 
-      return { latitude, longitude };
-    } catch (error: any) {
-      console.warn(
-        `Falha na geocodificação na tentativa ${tentativa.label}: ${
-          error?.code || error?.message || "erro desconhecido"
-        }`
+      debugGeocoding(
+        `candidato escolhido (${tentativa.label}): ${
+          resultado.display_name ?? "sem display_name"
+        } lat=${latitude} lon=${longitude}`
       );
+
+      return { latitude, longitude };
     }
   }
 

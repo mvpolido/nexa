@@ -1,9 +1,8 @@
 import {
-  calcularDistanciaHaversineKm,
+  calcularDistanciaKm as calcularDistanciaSeguraKm,
   coordenadasValidas,
-} from "../utils/coordinates";
+} from "../utils/distance";
 
-const RAIO_TERRA_KM = 6371;
 const RAIO_MAXIMO_KM = 50;
 
 /**
@@ -15,12 +14,12 @@ export function calcularDistanciaKm(
   latDestino: number,
   lonDestino: number
 ): number {
-  return calcularDistanciaHaversineKm(
+  return calcularDistanciaSeguraKm(
     latOrigem,
     lonOrigem,
     latDestino,
     lonDestino
-  );
+  ) ?? 0;
 }
 
 /**

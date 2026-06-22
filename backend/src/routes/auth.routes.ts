@@ -10,7 +10,7 @@ import { Empresa } from "../entities/Empresa";
 import { Habilidade } from "../entities/Habilidade";
 import { uploadConfig } from "../config/multer";
 import { geocodificarEndereco } from "../utils/geocoding";
-import { coordenadasValidas } from "../utils/coordinates";
+import { calcularDistanciaKm, coordenadasValidas } from "../utils/distance";
 import {
   mensagemAnoConclusaoInvalido,
   parseAnoConclusao,
@@ -22,6 +22,31 @@ const router = Router();
 
 function onlyNumbers(value: string | undefined): string {
   return (value || "").replace(/\D/g, "");
+}
+
+function alertarCoordenadasEnviadasSuspeitas(
+  origem: string,
+  latitudeEnviada: unknown,
+  longitudeEnviada: unknown,
+  latitudeConfirmada: number,
+  longitudeConfirmada: number
+) {
+  if (!coordenadasValidas(latitudeEnviada, longitudeEnviada)) return;
+
+  const diferencaKm = calcularDistanciaKm(
+    latitudeEnviada,
+    longitudeEnviada,
+    latitudeConfirmada,
+    longitudeConfirmada
+  );
+
+  if (diferencaKm !== null && diferencaKm > 5) {
+    console.warn(
+      `${origem}: coordenadas enviadas pelo cliente divergem da geocodificação em ${diferencaKm.toFixed(
+        1
+      )} km. Valor enviado ignorado.`
+    );
+  }
 }
 
 function parseIdArrayField(value: any): { ids: number[]; invalid: boolean } {
@@ -231,20 +256,13 @@ router.post("/register", (req, res, next) => {
     let usuarioSalvo: Usuario;
 
     if (perfil === UsuarioPerfil.ALUNO) {
-      let latitudeAluno =
-        coordenadasValidas(latitude, longitude) ? Number(latitude) : undefined;
-      let longitudeAluno =
-        coordenadasValidas(latitude, longitude) ? Number(longitude) : undefined;
-
-      if (latitudeAluno === undefined || longitudeAluno === undefined) {
-        const coordenadas = await geocodificarEndereco({
-          cep: cepLimpo,
-          endereco,
-          numero,
-        });
-        latitudeAluno = coordenadas?.latitude;
-        longitudeAluno = coordenadas?.longitude;
-      }
+      const coordenadasAluno = await geocodificarEndereco({
+        cep: cepLimpo,
+        endereco,
+        numero,
+      });
+      const latitudeAluno = coordenadasAluno?.latitude;
+      const longitudeAluno = coordenadasAluno?.longitude;
 
       if (!coordenadasValidas(latitudeAluno, longitudeAluno)) {
         return res.status(422).json({
@@ -252,6 +270,14 @@ router.post("/register", (req, res, next) => {
             "Não foi possível localizar o endereço do aluno. Confira CEP, endereço e número.",
         });
       }
+
+      alertarCoordenadasEnviadasSuspeitas(
+        "Cadastro de aluno",
+        latitude,
+        longitude,
+        Number(latitudeAluno),
+        Number(longitudeAluno)
+      );
 
       const anoConclusaoValidado = parseAnoConclusao(ano_conclusao);
       const habilidadeIdsUnicos = parseIdArrayField(habilidadeIds).ids;
