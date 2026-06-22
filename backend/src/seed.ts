@@ -9,60 +9,15 @@ import { Vaga, VagaModalidade } from "./entities/Vaga";
 import { Candidatura, CandidaturaStatus } from "./entities/Candidatura";
 import { AlunoHabilidade } from "./entities/AlunoHabilidade";
 import { VagaHabilidade } from "./entities/VagaHabilidade";
+import { habilidadesSeed } from "./data/habilidadesSeed";
 
 const TEST_PASSWORD = "123456";
-
-const habilidadesIniciais = [
-  { nome: "Flutter", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Dart", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "React", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Next.js", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "TypeScript", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "JavaScript", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Node.js", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Express", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Java", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Spring Boot", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Python", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Docker", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "Git", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "GitHub", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "APIs REST", area: HabilidadeArea.TECNOLOGIA },
-  { nome: "PostgreSQL", area: HabilidadeArea.EXATAS },
-  { nome: "MySQL", area: HabilidadeArea.EXATAS },
-  { nome: "Estatística", area: HabilidadeArea.EXATAS },
-  { nome: "Matemática aplicada", area: HabilidadeArea.EXATAS },
-  { nome: "Análise de dados", area: HabilidadeArea.EXATAS },
-  { nome: "CAD", area: HabilidadeArea.ENGENHARIA },
-  { nome: "AutoCAD", area: HabilidadeArea.ENGENHARIA },
-  { nome: "SolidWorks", area: HabilidadeArea.ENGENHARIA },
-  { nome: "Leitura de projetos", area: HabilidadeArea.ENGENHARIA },
-  { nome: "Controle de qualidade", area: HabilidadeArea.ENGENHARIA },
-  { nome: "Saúde digital", area: HabilidadeArea.SAUDE },
-  { nome: "Biossegurança", area: HabilidadeArea.SAUDE },
-  { nome: "Atendimento ao paciente", area: HabilidadeArea.SAUDE },
-  { nome: "Análise laboratorial", area: HabilidadeArea.QUIMICA },
-  { nome: "Química analítica", area: HabilidadeArea.QUIMICA },
-  { nome: "Controle de reagentes", area: HabilidadeArea.QUIMICA },
-  { nome: "Modelagem física", area: HabilidadeArea.FISICA },
-  { nome: "Instrumentação", area: HabilidadeArea.FISICA },
-  { nome: "Medições técnicas", area: HabilidadeArea.FISICA },
-  { nome: "Bioinformática", area: HabilidadeArea.BIOLOGIA },
-  { nome: "Microbiologia", area: HabilidadeArea.BIOLOGIA },
-  { nome: "Biotecnologia", area: HabilidadeArea.BIOLOGIA },
-  { nome: "Comunicação", area: HabilidadeArea.COMUNICACAO },
-  { nome: "Inglês básico", area: HabilidadeArea.COMUNICACAO },
-  { nome: "Inglês intermediário", area: HabilidadeArea.COMUNICACAO },
-  { nome: "Redação técnica", area: HabilidadeArea.COMUNICACAO },
-  { nome: "Trabalho em equipe", area: HabilidadeArea.GESTAO },
-  { nome: "Gestão de projetos", area: HabilidadeArea.GESTAO },
-  { nome: "Organização", area: HabilidadeArea.GESTAO },
-  { nome: "Liderança", area: HabilidadeArea.GESTAO },
-  { nome: "Figma", area: HabilidadeArea.DESIGN },
-  { nome: "UI/UX", area: HabilidadeArea.DESIGN },
-  { nome: "HTML", area: HabilidadeArea.DESIGN },
-  { nome: "CSS", area: HabilidadeArea.DESIGN },
-  { nome: "Prototipação", area: HabilidadeArea.DESIGN },
+const habilidadesAlunoTeste = [
+  "Flutter",
+  "Dart",
+  "Git",
+  "APIs REST",
+  "Comunicação",
 ];
 
 async function runSeed() {
@@ -145,12 +100,17 @@ async function runSeed() {
       area: HabilidadeArea;
     }) => {
       const { nome, area } = dados;
-      let habilidade = await habilidadeRepository.findOne({ where: { nome } });
+      const nomeNormalizado = nome.trim().replace(/\s+/g, " ");
+      let habilidade = await habilidadeRepository
+        .createQueryBuilder("habilidade")
+        .where("LOWER(habilidade.nome) = LOWER(:nome)", { nome: nomeNormalizado })
+        .getOne();
 
       if (!habilidade) {
-        habilidade = habilidadeRepository.create({ nome, area });
+        habilidade = habilidadeRepository.create({ nome: nomeNormalizado, area });
       }
 
+      habilidade.nome = nomeNormalizado;
       habilidade.area = area;
 
       return habilidadeRepository.save(habilidade);
@@ -263,8 +223,8 @@ async function runSeed() {
       UsuarioPerfil.EMPRESA
     );
     const adminUser = await getOrCreateUsuario(
-      "admin@nexa.com",
-      "Administrador Nexa",
+      "moderador@nexa.com",
+      "Moderador Nexa",
       UsuarioPerfil.ADMIN
     );
 
@@ -273,14 +233,17 @@ async function runSeed() {
 
     console.log("Criando ou reutilizando habilidades...");
     const habilidades = new Map<string, Habilidade>();
-    for (const habilidadeSeed of habilidadesIniciais) {
+    for (const habilidadeSeed of habilidadesSeed) {
       const habilidade = await getOrCreateHabilidade(habilidadeSeed);
       habilidades.set(habilidadeSeed.nome, habilidade);
     }
 
     console.log("Criando ou reutilizando vínculos aluno-habilidade...");
-    for (const habilidade of habilidades.values()) {
-      await getOrCreateAlunoHabilidade(aluno.id, habilidade.id);
+    for (const nomeHabilidade of habilidadesAlunoTeste) {
+      const habilidade = habilidades.get(nomeHabilidade);
+      if (habilidade) {
+        await getOrCreateAlunoHabilidade(aluno.id, habilidade.id);
+      }
     }
 
     console.log("Criando ou reutilizando vagas e vínculos vaga-habilidade...");
@@ -343,7 +306,7 @@ async function runSeed() {
     console.log("\nCredenciais de teste:");
     console.log(`Aluno:   ${alunoUser.email} / ${TEST_PASSWORD}`);
     console.log(`Empresa: ${empresaUser.email} / ${TEST_PASSWORD}`);
-    console.log(`Admin:   ${adminUser.email} / ${TEST_PASSWORD}`);
+    console.log(`Moderador: ${adminUser.email} / ${TEST_PASSWORD}`);
   } catch (error) {
     console.error("Erro ao executar seed:", error);
     process.exitCode = 1;

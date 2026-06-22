@@ -8,12 +8,20 @@ class SkillSelector extends StatelessWidget {
     required this.selectedIds,
     required this.onChanged,
     this.title = 'Habilidades',
+    this.searchController,
+    this.searchHint = 'Buscar habilidades',
+    this.showSearch = true,
+    this.showSelected = true,
   });
 
   final List<dynamic> habilidades;
   final Set<int> selectedIds;
   final ValueChanged<Set<int>> onChanged;
   final String title;
+  final TextEditingController? searchController;
+  final String searchHint;
+  final bool showSearch;
+  final bool showSelected;
 
   static const _areaLabels = {
     'TECNOLOGIA': 'Tecnologia',
@@ -45,6 +53,8 @@ class SkillSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _filteredHabilidades;
+
     if (habilidades.isEmpty) {
       return const Text(
         'Nenhuma habilidade cadastrada.',
@@ -70,15 +80,115 @@ class SkillSelector extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        ..._buildGroups(),
+        if (showSearch) ...[
+          TextField(
+            controller: searchController,
+            decoration: InputDecoration(
+              labelText: searchHint,
+              hintText: 'Digite para buscar...',
+              prefixIcon: const Icon(Icons.search),
+              filled: true,
+              fillColor: const Color(0xFFF9FAFB),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (showSelected && selectedIds.isNotEmpty) ...[
+          _buildSelectedSection(),
+          const SizedBox(height: 18),
+        ],
+        if (filtered.isEmpty)
+          const Text(
+            'Nenhuma habilidade encontrada.',
+            style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+          )
+        else
+          ..._buildGroups(filtered),
       ],
     );
   }
 
-  List<Widget> _buildGroups() {
+  List<dynamic> get _filteredHabilidades {
+    final query = _normalizar(searchController?.text ?? '');
+    if (query.isEmpty) return habilidades;
+
+    return habilidades.where((habilidade) {
+      final nome = habilidade['nome']?.toString() ?? '';
+      final area = habilidade['area']?.toString() ?? '';
+      final label = _areaLabels[area] ?? area;
+      return _normalizar(nome).contains(query) ||
+          _normalizar(label).contains(query);
+    }).toList();
+  }
+
+  String _normalizar(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp('[áàâãä]'), 'a')
+        .replaceAll(RegExp('[éèêë]'), 'e')
+        .replaceAll(RegExp('[íìîï]'), 'i')
+        .replaceAll(RegExp('[óòôõö]'), 'o')
+        .replaceAll(RegExp('[úùûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  Widget _buildSelectedSection() {
+    final selected = habilidades.where((habilidade) {
+      final id = habilidade['id'];
+      return id is int && selectedIds.contains(id);
+    }).toList();
+
+    if (selected.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Selecionadas',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF4B5563),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: selected.map((habilidade) {
+            final id = habilidade['id'];
+            return InputChip(
+              label: Text(habilidade['nome'] ?? 'Sem nome'),
+              selected: true,
+              selectedColor: const Color(0xFFEDE9FE),
+              deleteIconColor: const Color(0xFF7C3AED),
+              onDeleted: id is int
+                  ? () {
+                      final updated = Set<int>.from(selectedIds)..remove(id);
+                      onChanged(updated);
+                    }
+                  : null,
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildGroups(List<dynamic> habilidadesFiltradas) {
     final grouped = <String, List<dynamic>>{};
 
-    for (final habilidade in habilidades) {
+    for (final habilidade in habilidadesFiltradas) {
       final area = habilidade['area']?.toString();
       final key = _areaLabels.containsKey(area) ? area! : 'OUTRAS';
       grouped.putIfAbsent(key, () => []).add(habilidade);

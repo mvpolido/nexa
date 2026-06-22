@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../config/api_config.dart';
+import '../widgets/skill_selector.dart';
 
 enum RegisterStep {
   selection,
@@ -47,11 +48,16 @@ class _RegisterPageState extends State<RegisterPage> {
   final _instituicaoController = TextEditingController();
   final _cursoController = TextEditingController();
   final _anoController = TextEditingController();
+  final _skillsSearchController = TextEditingController();
   final _instituicaoFocusNode = FocusNode();
   final _cursoFocusNode = FocusNode();
-  final List<String> _selectedSkills = [];
+  List<dynamic> _habilidadesDisponiveis = [];
+  Set<int> _selectedSkillIds = {};
+  bool _isLoadingSkills = false;
+  String? _skillsError;
   String? _selectedInstituicao;
   String? _selectedCurso;
+  int? _selectedAnoConclusao;
   bool _cpfInteragido = false;
   bool _cnpjInteragido = false;
   bool _studentStep1TentouAvancar = false;
@@ -70,21 +76,6 @@ class _RegisterPageState extends State<RegisterPage> {
   // Controladores Empresa
   final _cnpjController = TextEditingController();
   final _descricaoController = TextEditingController();
-
-  final List<String> _suggestedSkills = [
-    'Python',
-    'JavaScript',
-    'React',
-    'Node.js',
-    'Flutter',
-    'Java',
-    'C++',
-    'SQL',
-    'MongoDB',
-    'Git',
-    'Docker',
-    'AWS',
-  ];
 
   static const List<String> _cursosPermitidos = [
     'Administração',
@@ -207,6 +198,26 @@ class _RegisterPageState extends State<RegisterPage> {
     'estadual de maringa': 'UEM - Universidade Estadual de Maringá',
   };
 
+  List<int> get _anosConclusaoValidos {
+    final maxYear = DateTime.now().year + 10;
+    return List<int>.generate(maxYear - 2020 + 1, (index) => 2020 + index);
+  }
+
+  String get _anoConclusaoMensagemErro {
+    return 'Selecione um ano entre 2020 e ${DateTime.now().year + 10}.';
+  }
+
+  String? get _anoConclusaoError {
+    if (!_studentStep1TentouAvancar && _selectedAnoConclusao == null) {
+      return null;
+    }
+    if (_selectedAnoConclusao == null) return _anoConclusaoMensagemErro;
+    if (!_anosConclusaoValidos.contains(_selectedAnoConclusao)) {
+      return _anoConclusaoMensagemErro;
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -226,6 +237,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _instituicaoController.addListener(_refreshUI);
     _cursoController.addListener(_refreshUI);
     _anoController.addListener(_refreshUI);
+    _skillsSearchController.addListener(_refreshUI);
     _cnpjController.addListener(_refreshUI);
     _descricaoController.addListener(_refreshUI);
   }
@@ -248,6 +260,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _instituicaoFocusNode.dispose();
     _cursoFocusNode.dispose();
     _anoController.dispose();
+    _skillsSearchController.dispose();
     _cnpjController.dispose();
     _descricaoController.dispose();
     super.dispose();
@@ -411,7 +424,8 @@ class _RegisterPageState extends State<RegisterPage> {
                 _canonicalInstituicao(_instituicaoController.text)) !=
             null &&
         (_selectedCurso ?? _canonicalCurso(_cursoController.text)) != null &&
-        _anoController.text.trim().isNotEmpty &&
+        _selectedAnoConclusao != null &&
+        _anosConclusaoValidos.contains(_selectedAnoConclusao) &&
         _emailController.text.contains('@') &&
         _senhaController.text.length >= 6 &&
         _confirmarSenhaController.text == _senhaController.text;
@@ -439,6 +453,10 @@ class _RegisterPageState extends State<RegisterPage> {
       _currentStep = next;
       _errorMessage = null;
     });
+
+    if (next == RegisterStep.studentStep2) {
+      _carregarHabilidadesDisponiveis();
+    }
   }
 
   void _voltar(RegisterStep previous) {
@@ -572,6 +590,50 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
+  Future<void> _carregarHabilidadesDisponiveis() async {
+    if (_isLoadingSkills || _habilidadesDisponiveis.isNotEmpty) return;
+
+    setState(() {
+      _isLoadingSkills = true;
+      _skillsError = null;
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/habilidades'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) {
+          setState(() {
+            _habilidadesDisponiveis = data;
+            _isLoadingSkills = false;
+          });
+          return;
+        }
+      }
+
+      setState(() {
+        _skillsError = 'Erro ao carregar habilidades.';
+        _isLoadingSkills = false;
+      });
+    } catch (_) {
+      setState(() {
+        _skillsError = 'Erro de conexão ao carregar habilidades.';
+        _isLoadingSkills = false;
+      });
+    }
+  }
+
+  Future<void> _recarregarHabilidades() async {
+    setState(() {
+      _habilidadesDisponiveis = [];
+      _skillsError = null;
+    });
+    await _carregarHabilidadesDisponiveis();
+  }
+
   Future<void> _selecionarCurriculo() async {
     try {
       final result = await FilePicker.pickFiles(
@@ -646,8 +708,8 @@ class _RegisterPageState extends State<RegisterPage> {
       body['instituicao'] =
           _selectedInstituicao ??
           _canonicalInstituicao(_instituicaoController.text);
-      body['ano_conclusao'] = int.tryParse(_anoController.text);
-      body['skills'] = _selectedSkills;
+      body['ano_conclusao'] = _selectedAnoConclusao;
+      body['habilidadeIds'] = _selectedSkillIds.toList();
     } else {
       body['cnpj'] = _onlyNumbers(_cnpjController.text);
       body['descricao'] = _descricaoController.text.trim();
@@ -957,16 +1019,26 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(width: 16),
             Expanded(
               flex: 1,
-              child: TextFormField(
-                controller: _anoController,
-                keyboardType: TextInputType.number,
-                decoration: _buildInputDecoration('Ano Conclusão', hint: '2026')
-                    .copyWith(
-                      errorText: _requiredError(
-                        _anoController.text,
-                        _studentStep1TentouAvancar,
+              child: DropdownButtonFormField<int>(
+                value: _selectedAnoConclusao,
+                isExpanded: true,
+                decoration: _buildInputDecoration(
+                  'Ano Conclusão',
+                ).copyWith(errorText: _anoConclusaoError),
+                items: _anosConclusaoValidos
+                    .map(
+                      (ano) => DropdownMenuItem<int>(
+                        value: ano,
+                        child: Text(ano.toString()),
                       ),
-                    ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedAnoConclusao = value;
+                    _anoController.text = value?.toString() ?? '';
+                  });
+                },
               ),
             ),
           ],
@@ -1085,41 +1157,50 @@ class _RegisterPageState extends State<RegisterPage> {
           style: TextStyle(color: Color(0xFF6B7280)),
         ),
         const SizedBox(height: 24),
-        TextField(
-          decoration: _buildInputDecoration(
-            'Buscar habilidades',
-            hint: 'Digite para buscar...',
+        if (_isLoadingSkills)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+            ),
+          )
+        else if (_skillsError != null)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFECACA)),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  _skillsError!,
+                  style: const TextStyle(color: Color(0xFFB91C1C)),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _recarregarHabilidades,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Tentar novamente'),
+                ),
+              ],
+            ),
+          )
+        else
+          SkillSelector(
+            title: 'Habilidades disponíveis',
+            habilidades: _habilidadesDisponiveis,
+            selectedIds: _selectedSkillIds,
+            searchController: _skillsSearchController,
+            onChanged: (updated) {
+              setState(() {
+                _selectedSkillIds = updated;
+              });
+            },
           ),
-        ),
-        const SizedBox(height: 24),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _suggestedSkills.map((skill) {
-            final isSelected = _selectedSkills.contains(skill);
-            return ChoiceChip(
-              label: Text(skill),
-              selected: isSelected,
-              selectedColor: const Color(0xFFEDE9FE),
-              backgroundColor: const Color(0xFFF9FAFB),
-              side: isSelected
-                  ? const BorderSide(color: Color(0xFF8B5CF6))
-                  : BorderSide.none,
-              labelStyle: TextStyle(
-                color: isSelected
-                    ? const Color(0xFF8B5CF6)
-                    : const Color(0xFF6B7280),
-              ),
-              onSelected: (selected) {
-                setState(() {
-                  selected
-                      ? _selectedSkills.add(skill)
-                      : _selectedSkills.remove(skill);
-                });
-              },
-            );
-          }).toList(),
-        ),
         const SizedBox(height: 48),
         _buildBackButton(RegisterStep.studentStep1),
         const SizedBox(height: 12),

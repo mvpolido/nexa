@@ -13,6 +13,10 @@ import {
   coordenadasValidas,
   geocodificarEndereco,
 } from "../utils/geocoding";
+import {
+  mensagemAnoConclusaoInvalido,
+  parseAnoConclusao,
+} from "../utils/anoConclusao";
 
 export class AlunoController {
   private static async empresaPodeAcessarAluno(
@@ -163,13 +167,23 @@ export class AlunoController {
         "numero",
         "instituicao",
         "curso",
-        "ano_conclusao",
       ];
 
       for (const campo of camposAluno) {
         if (Object.prototype.hasOwnProperty.call(req.body, campo)) {
           (aluno as any)[campo] = req.body[campo];
         }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(req.body, "ano_conclusao")) {
+        const anoConclusao = parseAnoConclusao(req.body.ano_conclusao);
+        if (anoConclusao === null) {
+          return res.status(400).json({
+            message: mensagemAnoConclusaoInvalido(),
+          });
+        }
+
+        aluno.ano_conclusao = anoConclusao;
       }
 
       if (!latitudeEnviada && !longitudeEnviada && enderecoFoiAlterado) {

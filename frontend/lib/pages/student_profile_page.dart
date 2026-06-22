@@ -34,6 +34,8 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   final _instituicaoController = TextEditingController();
   final _cursoController = TextEditingController();
   final _anoController = TextEditingController();
+  final _skillsSearchController = TextEditingController();
+  int? _selectedAnoConclusao;
 
   double? _latitude;
   double? _longitude;
@@ -47,7 +49,33 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   @override
   void initState() {
     super.initState();
+    _skillsSearchController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _carregarPerfil();
+  }
+
+  @override
+  void dispose() {
+    _nomeController.dispose();
+    _emailController.dispose();
+    _cpfController.dispose();
+    _cepController.dispose();
+    _enderecoController.dispose();
+    _instituicaoController.dispose();
+    _cursoController.dispose();
+    _anoController.dispose();
+    _skillsSearchController.dispose();
+    super.dispose();
+  }
+
+  List<int> get _anosConclusaoValidos {
+    final maxYear = DateTime.now().year + 10;
+    return List<int>.generate(maxYear - 2020 + 1, (index) => 2020 + index);
+  }
+
+  String get _anoConclusaoMensagemErro {
+    return 'Selecione um ano entre 2020 e ${DateTime.now().year + 10}.';
   }
 
   Future<void> _carregarPerfil() async {
@@ -100,10 +128,13 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
           _instituicaoController.text =
               data['instituicao'] ?? aluno['instituicao'] ?? '';
           _cursoController.text = data['curso'] ?? aluno['curso'] ?? '';
-          _anoController.text =
-              data['ano_conclusao']?.toString() ??
-              aluno['ano_conclusao']?.toString() ??
-              '';
+          final anoPerfil = int.tryParse(
+            (data['ano_conclusao'] ?? aluno['ano_conclusao'] ?? '').toString(),
+          );
+          _selectedAnoConclusao = _anosConclusaoValidos.contains(anoPerfil)
+              ? anoPerfil
+              : null;
+          _anoController.text = _selectedAnoConclusao?.toString() ?? '';
 
           _urlCurriculo = data['url_curriculo'] ?? aluno['url_curriculo'];
           _cepOriginal = _cepController.text;
@@ -274,6 +305,12 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
   }
 
   Future<void> _salvarPerfil() async {
+    if (_selectedAnoConclusao == null ||
+        !_anosConclusaoValidos.contains(_selectedAnoConclusao)) {
+      _mostrarErro(_anoConclusaoMensagemErro);
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     final prefs = await SharedPreferences.getInstance();
@@ -287,7 +324,7 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
       'endereco': _enderecoController.text,
       'instituicao': _instituicaoController.text,
       'curso': _cursoController.text,
-      'ano_conclusao': int.tryParse(_anoController.text),
+      'ano_conclusao': _selectedAnoConclusao,
     };
 
     if (!enderecoAlterado && _hasValidCoordinates(_latitude, _longitude)) {
@@ -469,6 +506,77 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
                           color: isReadOnly && _isEditing
                               ? const Color(0xFF9CA3AF)
                               : const Color(0xFF1F2937),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnoConclusaoField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.calendar_today_outlined,
+            color: Color(0xFF9CA3AF),
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Previsão de Formatura',
+                  style: TextStyle(color: Color(0xFF6B7280), fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                _isEditing
+                    ? DropdownButtonFormField<int>(
+                        value: _selectedAnoConclusao,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 12,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF3F4F6),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                        items: _anosConclusaoValidos
+                            .map(
+                              (ano) => DropdownMenuItem<int>(
+                                value: ano,
+                                child: Text(ano.toString()),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedAnoConclusao = value;
+                            _anoController.text = value?.toString() ?? '';
+                          });
+                        },
+                      )
+                    : Text(
+                        _anoController.text.isEmpty
+                            ? 'Não informado'
+                            : _anoController.text,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF1F2937),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -781,12 +889,7 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
                         icon: Icons.school_outlined,
                         controller: _cursoController,
                       ),
-                      _buildField(
-                        label: 'Previsão de Formatura',
-                        icon: Icons.calendar_today_outlined,
-                        controller: _anoController,
-                        keyboardType: TextInputType.number,
-                      ),
+                      _buildAnoConclusaoField(),
                     ],
                   ),
 
@@ -799,6 +902,7 @@ class _StudentProfilePageState extends State<StudentProfilePage> {
                           title: 'Minhas habilidades',
                           habilidades: _habilidadesDisponiveis,
                           selectedIds: _habilidadesSelecionadas,
+                          searchController: _skillsSearchController,
                           onChanged: (updated) {
                             setState(() {
                               _habilidadesSelecionadas = updated;

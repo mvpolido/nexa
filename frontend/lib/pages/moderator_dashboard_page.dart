@@ -1,0 +1,1186 @@
+// ignore_for_file: deprecated_member_use
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../services/admin_service.dart';
+
+class ModeratorDashboardPage extends StatefulWidget {
+  const ModeratorDashboardPage({super.key});
+
+  @override
+  State<ModeratorDashboardPage> createState() => _ModeratorDashboardPageState();
+}
+
+class _ModeratorDashboardPageState extends State<ModeratorDashboardPage> {
+  final _service = AdminService();
+  final _buscaUsuariosController = TextEditingController();
+  final _buscaEmpresasController = TextEditingController();
+  final _buscaVagasController = TextEditingController();
+  final _buscaHabilidadesController = TextEditingController();
+
+  int _selectedIndex = 0;
+  int? _meuUsuarioId;
+  String? _nomeModerador;
+  bool _loading = true;
+  bool _actionLoading = false;
+  String? _erro;
+
+  Map<String, dynamic> _stats = {};
+  List<dynamic> _usuarios = [];
+  List<dynamic> _empresas = [];
+  List<dynamic> _vagas = [];
+  List<dynamic> _habilidades = [];
+
+  String? _perfilFiltro;
+  bool? _empresaVerificadaFiltro;
+  bool? _vagaAtivaFiltro;
+  String? _areaFiltro;
+
+  static const _purple = Color(0xFF7C3AED);
+  static const _areas = [
+    'TECNOLOGIA',
+    'ENGENHARIA',
+    'EXATAS',
+    'SAUDE',
+    'QUIMICA',
+    'FISICA',
+    'BIOLOGIA',
+    'COMUNICACAO',
+    'GESTAO',
+    'DESIGN',
+  ];
+
+  static const _areaLabels = {
+    'TECNOLOGIA': 'Tecnologia',
+    'ENGENHARIA': 'Engenharia',
+    'EXATAS': 'Exatas',
+    'SAUDE': 'Saúde',
+    'QUIMICA': 'Química',
+    'FISICA': 'Física',
+    'BIOLOGIA': 'Biologia',
+    'COMUNICACAO': 'Comunicação',
+    'GESTAO': 'Gestão',
+    'DESIGN': 'Design',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarSessao();
+  }
+
+  @override
+  void dispose() {
+    _buscaUsuariosController.dispose();
+    _buscaEmpresasController.dispose();
+    _buscaVagasController.dispose();
+    _buscaHabilidadesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _carregarSessao() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rawId = prefs.getString('user_id');
+    final token = prefs.getString('token');
+
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/onboarding');
+      return;
+    }
+
+    setState(() {
+      _meuUsuarioId = int.tryParse(rawId ?? '');
+      _nomeModerador = prefs.getString('user_nome') ?? 'Moderador';
+    });
+
+    await _carregarDados();
+  }
+
+  Future<void> _carregarDados() async {
+    setState(() {
+      _loading = true;
+      _erro = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        _service.dashboardStats(),
+        _service.usuarios(
+          busca: _buscaUsuariosController.text,
+          perfil: _perfilFiltro,
+        ),
+        _service.empresas(
+          busca: _buscaEmpresasController.text,
+          verificada: _empresaVerificadaFiltro,
+        ),
+        _service.vagas(
+          busca: _buscaVagasController.text,
+          ativo: _vagaAtivaFiltro,
+        ),
+        _service.habilidades(
+          busca: _buscaHabilidadesController.text,
+          area: _areaFiltro,
+        ),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _stats = results[0] as Map<String, dynamic>;
+        _usuarios = results[1] as List<dynamic>;
+        _empresas = results[2] as List<dynamic>;
+        _vagas = results[3] as List<dynamic>;
+        _habilidades = results[4] as List<dynamic>;
+        _loading = false;
+      });
+    } on AdminServiceException catch (e) {
+      _handleError(e);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _erro = 'Erro de conexão com o servidor.';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _carregarAbaAtual() async {
+    setState(() {
+      _loading = true;
+      _erro = null;
+    });
+
+    try {
+      if (_selectedIndex == 0) {
+        _stats = await _service.dashboardStats();
+      } else if (_selectedIndex == 1) {
+        _usuarios = await _service.usuarios(
+          busca: _buscaUsuariosController.text,
+          perfil: _perfilFiltro,
+        );
+      } else if (_selectedIndex == 2) {
+        _empresas = await _service.empresas(
+          busca: _buscaEmpresasController.text,
+          verificada: _empresaVerificadaFiltro,
+        );
+      } else if (_selectedIndex == 3) {
+        _vagas = await _service.vagas(
+          busca: _buscaVagasController.text,
+          ativo: _vagaAtivaFiltro,
+        );
+      } else {
+        _habilidades = await _service.habilidades(
+          busca: _buscaHabilidadesController.text,
+          area: _areaFiltro,
+        );
+      }
+
+      if (!mounted) return;
+      setState(() => _loading = false);
+    } on AdminServiceException catch (e) {
+      _handleError(e);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _erro = 'Erro de conexão com o servidor.';
+        _loading = false;
+      });
+    }
+  }
+
+  void _handleError(AdminServiceException e) {
+    if (!mounted) return;
+    if (e.statusCode == 401 || e.statusCode == 403) {
+      _logout();
+      return;
+    }
+    setState(() {
+      _erro = e.message;
+      _loading = false;
+      _actionLoading = false;
+    });
+    _showSnack(e.message, error: true);
+  }
+
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('token');
+    await prefs.remove('user_id');
+    await prefs.remove('user_nome');
+    await prefs.remove('user_email');
+    await prefs.remove('user_perfil');
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed('/onboarding');
+  }
+
+  void _showSnack(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? Colors.red : Colors.green,
+      ),
+    );
+  }
+
+  Future<bool> _confirmar(String titulo, String mensagem) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(titulo),
+        content: Text(mensagem),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _executarAcao(
+    Future<void> Function() action,
+    String sucesso,
+  ) async {
+    setState(() => _actionLoading = true);
+    try {
+      await action();
+      _showSnack(sucesso);
+      await _carregarAbaAtual();
+      if (_selectedIndex != 0) {
+        _stats = await _service.dashboardStats();
+      }
+    } on AdminServiceException catch (e) {
+      _handleError(e);
+    } catch (_) {
+      _showSnack('Erro de conexão com o servidor.', error: true);
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
+    }
+  }
+
+  String _perfilLabel(String? perfil) {
+    return switch (perfil) {
+      'aluno' => 'Aluno',
+      'empresa' => 'Empresa',
+      'admin' => 'Moderador',
+      _ => 'Desconhecido',
+    };
+  }
+
+  String _formatDate(dynamic value) {
+    final date = DateTime.tryParse(value?.toString() ?? '');
+    if (date == null) return 'Sem data';
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  String _maskCnpj(dynamic value) {
+    final digits = value?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '';
+    if (digits.length != 14) return value?.toString() ?? 'Não informado';
+    return '${digits.substring(0, 2)}.${digits.substring(2, 5)}.${digits.substring(5, 8)}/${digits.substring(8, 12)}-${digits.substring(12)}';
+  }
+
+  bool _isVagaAtiva(dynamic vaga) {
+    final ativo = vaga['ativo'];
+    return ativo == 1 || ativo == true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width >= 900;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9FAFB),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1F2937),
+        elevation: 0,
+        title: const Text('Painel do Moderador'),
+        actions: [
+          if (_actionLoading)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(
+                height: 18,
+                width: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          IconButton(
+            tooltip: 'Atualizar',
+            onPressed: _loading ? null : _carregarAbaAtual,
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            tooltip: 'Sair',
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: Row(
+        children: [
+          if (isWide) _buildSideNav(),
+          Expanded(
+            child: Column(
+              children: [
+                if (!isWide) _buildTopNav(),
+                Expanded(child: _buildContent()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSideNav() {
+    return Container(
+      width: 240,
+      color: Colors.white,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _nomeModerador ?? 'Moderador',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          const Text('Moderador', style: TextStyle(color: Color(0xFF6B7280))),
+          const SizedBox(height: 24),
+          ...List.generate(_navItems.length, (index) {
+            final item = _navItems[index];
+            final selected = _selectedIndex == index;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                selected: selected,
+                selectedTileColor: const Color(0xFFEDE9FE),
+                leading: Icon(item.icon, color: selected ? _purple : null),
+                title: Text(item.label),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                onTap: () => setState(() => _selectedIndex = index),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopNav() {
+    return Container(
+      color: Colors.white,
+      height: 56,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        itemCount: _navItems.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final item = _navItems[index];
+          return ChoiceChip(
+            label: Text(item.label),
+            selected: _selectedIndex == index,
+            avatar: Icon(item.icon, size: 18),
+            onSelected: (_) => setState(() => _selectedIndex = index),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: _purple));
+    }
+
+    if (_erro != null) {
+      return _buildEmptyState(
+        icon: Icons.error_outline,
+        title: 'Não foi possível carregar',
+        message: _erro!,
+        actionLabel: 'Tentar novamente',
+        onAction: _carregarAbaAtual,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _carregarAbaAtual,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1180),
+          child: switch (_selectedIndex) {
+            0 => _buildOverview(),
+            1 => _buildUsuarios(),
+            2 => _buildEmpresas(),
+            3 => _buildVagas(),
+            _ => _buildHabilidades(),
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverview() {
+    final cards = [
+      _StatCard('Usuários', _stats['usuarios'], Icons.people_outline),
+      _StatCard('Alunos', _stats['alunos'], Icons.school_outlined),
+      _StatCard('Empresas', _stats['empresas'], Icons.business_outlined),
+      _StatCard('Verificadas', _stats['empresasVerificadas'], Icons.verified),
+      _StatCard(
+        'Pendentes',
+        _stats['empresasPendentes'],
+        Icons.pending_actions,
+      ),
+      _StatCard('Vagas', _stats['vagas'], Icons.work_outline),
+      _StatCard('Vagas ativas', _stats['vagasAtivas'], Icons.check_circle),
+      _StatCard('Habilidades', _stats['habilidades'], Icons.star_border),
+    ];
+
+    if (_stats.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.dashboard_outlined,
+        title: 'Sem estatísticas',
+        message: 'Ainda não há dados para exibir.',
+        actionLabel: 'Atualizar',
+        onAction: _carregarAbaAtual,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Visão geral', 'Acompanhe os principais números.'),
+        const SizedBox(height: 20),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final crossAxisCount = width >= 1000
+                ? 4
+                : width >= 640
+                ? 2
+                : 1;
+            return GridView.builder(
+              itemCount: cards.length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 2.5,
+              ),
+              itemBuilder: (context, index) => _buildStatCard(cards[index]),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUsuarios() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          'Usuários',
+          'Gerencie contas de alunos, empresas e moderadores.',
+        ),
+        _buildFilters([
+          Expanded(
+            child: _searchField(
+              _buscaUsuariosController,
+              'Buscar por nome ou email',
+              _carregarAbaAtual,
+            ),
+          ),
+          _dropdown<String>(
+            value: _perfilFiltro,
+            hint: 'Perfil',
+            items: const {
+              'aluno': 'Aluno',
+              'empresa': 'Empresa',
+              'admin': 'Moderador',
+            },
+            onChanged: (value) {
+              setState(() => _perfilFiltro = value);
+              _carregarAbaAtual();
+            },
+          ),
+        ]),
+        if (_usuarios.isEmpty)
+          _buildEmptyState(
+            icon: Icons.people_outline,
+            title: 'Nenhum usuário encontrado',
+            message: 'Ajuste a busca ou os filtros.',
+          )
+        else
+          ..._usuarios.map(_buildUsuarioCard),
+      ],
+    );
+  }
+
+  Widget _buildUsuarioCard(dynamic usuario) {
+    final id = usuario['id'] is int
+        ? usuario['id'] as int
+        : int.tryParse('${usuario['id']}');
+    final isSelf = id != null && id == _meuUsuarioId;
+
+    return _card(
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFFEDE9FE),
+          child: Icon(Icons.person_outline, color: _purple),
+        ),
+        title: Text(usuario['nome_exibicao'] ?? 'Sem nome'),
+        subtitle: Text(
+          '${usuario['email'] ?? 'Sem email'}\n${_perfilLabel(usuario['perfil'])} - Criado em ${_formatDate(usuario['criado_em'])}',
+        ),
+        isThreeLine: true,
+        trailing: IconButton(
+          tooltip: isSelf
+              ? 'Você não pode excluir sua própria conta'
+              : 'Excluir',
+          onPressed: isSelf || id == null
+              ? null
+              : () async {
+                  final ok = await _confirmar(
+                    'Excluir usuário',
+                    'Tem certeza que deseja excluir este usuário?',
+                  );
+                  if (!ok) return;
+                  await _executarAcao(
+                    () => _service.excluirUsuario(id),
+                    'Usuário removido com sucesso.',
+                  );
+                },
+          icon: const Icon(Icons.delete_outline),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmpresas() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          'Empresas',
+          'Analise cadastros e status de verificação.',
+        ),
+        _buildFilters([
+          Expanded(
+            child: _searchField(
+              _buscaEmpresasController,
+              'Buscar empresa, email ou CNPJ',
+              _carregarAbaAtual,
+            ),
+          ),
+          _dropdown<bool>(
+            value: _empresaVerificadaFiltro,
+            hint: 'Status',
+            items: const {true: 'Verificadas', false: 'Pendentes'},
+            onChanged: (value) {
+              setState(() => _empresaVerificadaFiltro = value);
+              _carregarAbaAtual();
+            },
+          ),
+        ]),
+        if (_empresas.isEmpty)
+          _buildEmptyState(
+            icon: Icons.business_outlined,
+            title: 'Nenhuma empresa encontrada',
+            message: 'Ajuste a busca ou os filtros.',
+          )
+        else
+          ..._empresas.map(_buildEmpresaCard),
+      ],
+    );
+  }
+
+  Widget _buildEmpresaCard(dynamic empresa) {
+    final usuario = empresa['usuario'] ?? {};
+    final verificada = empresa['verificada'] == true;
+    final id = empresa['id'] is int
+        ? empresa['id'] as int
+        : int.tryParse('${empresa['id']}');
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  usuario['nome_exibicao'] ?? 'Empresa sem nome',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Chip(
+                label: Text(verificada ? 'Verificada' : 'Pendente'),
+                backgroundColor: verificada
+                    ? const Color(0xFFDCFCE7)
+                    : const Color(0xFFFEF3C7),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(usuario['email'] ?? 'Sem email'),
+          Text('CNPJ: ${_maskCnpj(empresa['cnpj'])}'),
+          Text('Vagas: ${empresa['quantidadeVagas'] ?? 0}'),
+          const SizedBox(height: 8),
+          Text(
+            empresa['descricao'] ?? 'Sem descrição.',
+            style: const TextStyle(color: Color(0xFF6B7280)),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: id == null
+                  ? null
+                  : () => _executarAcao(
+                      () => _service.verificarEmpresa(id, !verificada),
+                      verificada
+                          ? 'Verificação removida com sucesso.'
+                          : 'Empresa verificada com sucesso.',
+                    ),
+              icon: Icon(verificada ? Icons.verified_outlined : Icons.verified),
+              label: Text(verificada ? 'Retirar verificação' : 'Verificar'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVagas() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Vagas', 'Acompanhe e modere vagas publicadas.'),
+        _buildFilters([
+          Expanded(
+            child: _searchField(
+              _buscaVagasController,
+              'Buscar por título ou empresa',
+              _carregarAbaAtual,
+            ),
+          ),
+          _dropdown<bool>(
+            value: _vagaAtivaFiltro,
+            hint: 'Status',
+            items: const {true: 'Ativas', false: 'Arquivadas'},
+            onChanged: (value) {
+              setState(() => _vagaAtivaFiltro = value);
+              _carregarAbaAtual();
+            },
+          ),
+        ]),
+        if (_vagas.isEmpty)
+          _buildEmptyState(
+            icon: Icons.work_outline,
+            title: 'Nenhuma vaga encontrada',
+            message: 'Ajuste a busca ou os filtros.',
+          )
+        else
+          ..._vagas.map(_buildVagaCard),
+      ],
+    );
+  }
+
+  Widget _buildVagaCard(dynamic vaga) {
+    final empresa = vaga['empresa'] ?? {};
+    final usuario = empresa['usuario'] ?? {};
+    final id = vaga['id'] is int
+        ? vaga['id'] as int
+        : int.tryParse('${vaga['id']}');
+    final ativa = _isVagaAtiva(vaga);
+
+    return _card(
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: CircleAvatar(
+          backgroundColor: ativa
+              ? const Color(0xFFDCFCE7)
+              : const Color(0xFFF3F4F6),
+          child: Icon(ativa ? Icons.work_outline : Icons.archive_outlined),
+        ),
+        title: Text(vaga['titulo'] ?? 'Vaga sem título'),
+        subtitle: Text(
+          '${usuario['nome_exibicao'] ?? 'Empresa não informada'}\n${vaga['modalidade'] ?? 'Modalidade não informada'} - ${ativa ? 'Ativa' : 'Arquivada'} - ${_formatDate(vaga['criado_em'])}',
+        ),
+        isThreeLine: true,
+        trailing: IconButton(
+          tooltip: 'Excluir vaga',
+          onPressed: id == null
+              ? null
+              : () async {
+                  final ok = await _confirmar(
+                    'Excluir vaga',
+                    'Tem certeza que deseja excluir esta vaga?',
+                  );
+                  if (!ok) return;
+                  await _executarAcao(
+                    () => _service.excluirVaga(id),
+                    'Vaga removida com sucesso.',
+                  );
+                },
+          icon: const Icon(Icons.delete_outline),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHabilidades() {
+    final grouped = <String, List<dynamic>>{};
+    for (final habilidade in _habilidades) {
+      final area = habilidade['area']?.toString() ?? 'OUTRAS';
+      grouped.putIfAbsent(area, () => []).add(habilidade);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          'Habilidades',
+          'Crie e mantenha o catálogo usado por alunos e vagas.',
+          action: ElevatedButton.icon(
+            onPressed: () => _abrirDialogHabilidade(),
+            icon: const Icon(Icons.add),
+            label: const Text('Nova habilidade'),
+          ),
+        ),
+        _buildFilters([
+          Expanded(
+            child: _searchField(
+              _buscaHabilidadesController,
+              'Buscar habilidade',
+              _carregarAbaAtual,
+            ),
+          ),
+          _dropdown<String>(
+            value: _areaFiltro,
+            hint: 'Área',
+            items: {for (final area in _areas) area: _areaLabels[area] ?? area},
+            onChanged: (value) {
+              setState(() => _areaFiltro = value);
+              _carregarAbaAtual();
+            },
+          ),
+        ]),
+        if (_habilidades.isEmpty)
+          _buildEmptyState(
+            icon: Icons.star_border,
+            title: 'Nenhuma habilidade encontrada',
+            message: 'Ajuste a busca ou cadastre uma nova habilidade.',
+          )
+        else
+          ...grouped.entries.map((entry) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 8),
+                  child: Text(
+                    _areaLabels[entry.key] ?? entry.key,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                ...entry.value.map(_buildHabilidadeCard),
+              ],
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildHabilidadeCard(dynamic habilidade) {
+    final id = habilidade['id'] is int
+        ? habilidade['id'] as int
+        : int.tryParse('${habilidade['id']}');
+
+    return _card(
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const CircleAvatar(
+          backgroundColor: Color(0xFFEDE9FE),
+          child: Icon(Icons.star_border, color: _purple),
+        ),
+        title: Text(habilidade['nome'] ?? 'Sem nome'),
+        subtitle: Text(
+          _areaLabels[habilidade['area']] ?? habilidade['area'] ?? 'Sem área',
+        ),
+        trailing: Wrap(
+          spacing: 4,
+          children: [
+            IconButton(
+              tooltip: 'Editar',
+              onPressed: id == null
+                  ? null
+                  : () => _abrirDialogHabilidade(habilidade: habilidade),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+            IconButton(
+              tooltip: 'Excluir',
+              onPressed: id == null
+                  ? null
+                  : () async {
+                      final ok = await _confirmar(
+                        'Excluir habilidade',
+                        'Tem certeza que deseja excluir esta habilidade?',
+                      );
+                      if (!ok) return;
+                      await _executarAcao(
+                        () => _service.excluirHabilidade(id),
+                        'Habilidade removida com sucesso.',
+                      );
+                    },
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _abrirDialogHabilidade({dynamic habilidade}) async {
+    final editando = habilidade != null;
+    final nomeController = TextEditingController(
+      text: editando ? habilidade['nome'] ?? '' : '',
+    );
+    String area = editando ? habilidade['area'] ?? 'TECNOLOGIA' : 'TECNOLOGIA';
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(editando ? 'Editar habilidade' : 'Nova habilidade'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nomeController,
+                  decoration: const InputDecoration(labelText: 'Nome'),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Informe o nome.'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: area,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Área'),
+                  items: _areas
+                      .map(
+                        (item) => DropdownMenuItem(
+                          value: item,
+                          child: Text(_areaLabels[item] ?? item),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => area = value ?? area,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                Navigator.of(context).pop();
+                final id = editando
+                    ? habilidade['id'] is int
+                          ? habilidade['id'] as int
+                          : int.tryParse('${habilidade['id']}')
+                    : null;
+                await _executarAcao(
+                  () => editando && id != null
+                      ? _service.atualizarHabilidade(
+                          id,
+                          nomeController.text.trim(),
+                          area,
+                        )
+                      : _service.criarHabilidade(
+                          nomeController.text.trim(),
+                          area,
+                        ),
+                  editando
+                      ? 'Habilidade atualizada com sucesso.'
+                      : 'Habilidade criada com sucesso.',
+                );
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    nomeController.dispose();
+  }
+
+  Widget _buildSectionHeader(String title, String subtitle, {Widget? action}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: Color(0xFF6B7280)),
+                ),
+              ],
+            ),
+          ),
+          if (action != null) action,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilters(List<Widget> children) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 680) {
+            return Column(
+              children: children
+                  .map(
+                    (child) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: child,
+                    ),
+                  )
+                  .toList(),
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children
+                .map(
+                  (child) => Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: child,
+                  ),
+                )
+                .toList(),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _searchField(
+    TextEditingController controller,
+    String label,
+    VoidCallback onSearch,
+  ) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: IconButton(
+          tooltip: 'Buscar',
+          onPressed: onSearch,
+          icon: const Icon(Icons.arrow_forward),
+        ),
+      ),
+      onSubmitted: (_) => onSearch(),
+    );
+  }
+
+  Widget _dropdown<T>({
+    required T? value,
+    required String hint,
+    required Map<T, String> items,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return SizedBox(
+      width: 220,
+      child: DropdownButtonFormField<T>(
+        value: value,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: hint,
+          suffixIcon: value == null
+              ? null
+              : IconButton(
+                  tooltip: 'Limpar filtro',
+                  onPressed: () => onChanged(null),
+                  icon: const Icon(Icons.clear),
+                ),
+        ),
+        items: items.entries
+            .map(
+              (entry) => DropdownMenuItem<T>(
+                value: entry.key,
+                child: Text(entry.value),
+              ),
+            )
+            .toList(),
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  Widget _card({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildStatCard(_StatCard card) {
+    return _card(
+      child: Row(
+        children: [
+          Container(
+            height: 44,
+            width: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEDE9FE),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(card.icon, color: _purple),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  card.label,
+                  style: const TextStyle(color: Color(0xFF6B7280)),
+                ),
+                Text(
+                  '${card.value ?? 0}',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String message,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: const Color(0xFF9CA3AF)),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(message, style: const TextStyle(color: Color(0xFF6B7280))),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: onAction,
+                icon: const Icon(Icons.refresh),
+                label: Text(actionLabel),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<_NavItem> get _navItems => const [
+    _NavItem('Visão geral', Icons.dashboard_outlined),
+    _NavItem('Usuários', Icons.people_outline),
+    _NavItem('Empresas', Icons.business_outlined),
+    _NavItem('Vagas', Icons.work_outline),
+    _NavItem('Habilidades', Icons.star_border),
+  ];
+}
+
+class _NavItem {
+  const _NavItem(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+}
+
+class _StatCard {
+  const _StatCard(this.label, this.value, this.icon);
+
+  final String label;
+  final dynamic value;
+  final IconData icon;
+}
