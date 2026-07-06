@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'company_dashboard_page.dart';
-import 'login_page.dart';
+import 'moderator_dashboard_page.dart';
 import 'student_jobs_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -30,16 +30,25 @@ class _HomePageState extends State<HomePage> {
 
     if (token == null || token.isEmpty) {
       if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/onboarding');
+      return;
+    }
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
+    final perfilNormalizado = perfil?.toLowerCase();
 
+    if (!['aluno', 'empresa', 'admin'].contains(perfilNormalizado)) {
+      await prefs.remove('token');
+      await prefs.remove('user_id');
+      await prefs.remove('user_nome');
+      await prefs.remove('user_email');
+      await prefs.remove('user_perfil');
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/onboarding');
       return;
     }
 
     setState(() {
-      _perfil = perfil?.toLowerCase();
+      _perfil = perfilNormalizado;
       _isLoading = false;
     });
   }
@@ -47,16 +56,17 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_perfil == 'empresa') {
-      return CompanyDashboardPage();
+      return const CompanyDashboardPage();
     }
 
-    // Retorna a view de aluno limpa
+    if (_perfil == 'admin') {
+      return const ModeratorDashboardPage();
+    }
+
     return const StudentJobsPage();
   }
 }

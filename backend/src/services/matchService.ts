@@ -1,4 +1,8 @@
-const RAIO_TERRA_KM = 6371;
+import {
+  calcularDistanciaKm as calcularDistanciaSeguraKm,
+  coordenadasValidas,
+} from "../utils/distance";
+
 const RAIO_MAXIMO_KM = 50;
 
 /**
@@ -10,19 +14,12 @@ export function calcularDistanciaKm(
   latDestino: number,
   lonDestino: number
 ): number {
-  const toRad = (graus: number) => (graus * Math.PI) / 180;
-
-  const dLat = toRad(latDestino - latOrigem);
-  const dLon = toRad(lonDestino - lonOrigem);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(latOrigem)) *
-      Math.cos(toRad(latDestino)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-
-  return 2 * RAIO_TERRA_KM * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return calcularDistanciaSeguraKm(
+    latOrigem,
+    lonOrigem,
+    latDestino,
+    lonDestino
+  ) ?? 0;
 }
 
 /**
@@ -52,12 +49,11 @@ export function calcularScoreDistancia(
   vagaLat: number | null | undefined,
   vagaLon: number | null | undefined
 ): number {
-  if (
-    alunoLat == null ||
-    alunoLon == null ||
-    vagaLat == null ||
-    vagaLon == null
-  ) {
+  if (!coordenadasValidas(alunoLat, alunoLon)) {
+    return 0;
+  }
+
+  if (!coordenadasValidas(vagaLat, vagaLon)) {
     return 0;
   }
 

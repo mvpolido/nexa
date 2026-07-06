@@ -4,12 +4,185 @@ import { AppDataSource } from "../data-source";
 import { Aluno } from "../entities/Aluno";
 import { Vaga, VagaModalidade } from "../entities/Vaga";
 import { Empresa } from "../entities/Empresa";
-import { UsuarioPerfil } from "../entities/Usuario";
+import { Usuario, UsuarioPerfil } from "../entities/Usuario";
 import { Habilidade } from "../entities/Habilidade";
 import { VagaHabilidade } from "../entities/VagaHabilidade";
+import { Notificacao } from "../entities/Notificacao";
 import { calcularMatchPercent } from "../services/matchService";
+import { geocodificarEndereco } from "../utils/geocoding";
+import {
+  calcularDistanciaKm,
+  coordenadasValidas,
+} from "../utils/distance";
 
 export class VagaController {
+  private static textoPreenchido(value: unknown) {
+    return typeof value === "string" && value.trim().length > 0;
+  }
+
+  private static normalizarTextoOpcional(value: unknown) {
+    return typeof value === "string" && value.trim().length > 0
+      ? value.trim()
+      : undefined;
+  }
+
+  private static normalizarTextoBusca(value: unknown) {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ");
+  }
+
+  private static normalizarListaCursos(value: unknown) {
+    if (value === undefined) return undefined;
+    if (value === null || value === "") return null;
+
+    let lista: unknown = value;
+
+    if (typeof value === "string") {
+      const texto = value.trim();
+      if (!texto) return null;
+
+      try {
+        const parsed = JSON.parse(texto);
+        lista = Array.isArray(parsed) ? parsed : texto.split(",");
+      } catch {
+        lista = texto.split(",");
+      }
+    }
+
+    if (!Array.isArray(lista)) {
+      throw new Error("cursos_destinados deve ser uma lista de cursos.");
+    }
+
+    const cursos = new Map<string, string>();
+
+    for (const item of lista) {
+      if (typeof item !== "string") {
+        throw new Error("cursos_destinados deve ser uma lista de cursos.");
+      }
+
+      const curso = item.trim();
+      if (!curso) continue;
+      cursos.set(VagaController.normalizarTextoBusca(curso), curso);
+    }
+
+    return Array.from(cursos.values());
+  }
+
+  private static normalizarAnoConclusao(value: unknown) {
+    if (value === undefined) return undefined;
+    if (value === null || value === "") return null;
+
+    const ano = Number(value);
+
+    if (!Number.isInteger(ano) || ano < 2020 || ano > 2035) {
+      throw new Error("Ano de conclusão deve ser um inteiro entre 2020 e 2035.");
+    }
+
+    return ano;
+  }
+
+  private static validarIntervaloConclusao(
+    min?: number | null,
+    max?: number | null
+  ) {
+    if (min !== undefined && max !== undefined && min !== null && max !== null && min > max) {
+      throw new Error("Ano de conclusão mínimo não pode ser maior que o máximo.");
+    }
+  }
+
+  private static bodyTemCampo(body: Record<string, unknown>, ...campos: string[]) {
+    return campos.some((campo) => Object.prototype.hasOwnProperty.call(body, campo));
+  }
+
+  private static obterCampoBody(
+    body: Record<string, unknown>,
+    snakeCase: string,
+    camelCase: string
+  ) {
+    if (Object.prototype.hasOwnProperty.call(body, snakeCase)) {
+      return body[snakeCase];
+    }
+
+    return body[camelCase];
+  }
+
+  private static erroValidacaoVaga(message: string) {
+    return (
+      message.includes("cursos_destinados") ||
+      message.includes("Ano de conclusão")
+    );
+  }
+
+  private static enderecoMinimoPreenchido(dados: {
+    cep?: unknown;
+    endereco?: unknown;
+    cidade?: unknown;
+    estado?: unknown;
+  }) {
+    const cep = typeof dados.cep === "string" ? dados.cep.replace(/\D/g, "") : "";
+
+    return (
+      cep.length === 8 &&
+      VagaController.textoPreenchido(dados.endereco) &&
+      VagaController.textoPreenchido(dados.cidade) &&
+      VagaController.textoPreenchido(dados.estado)
+    );
+  }
+
+  private static calcularDistanciaKm(
+    origemLat?: unknown,
+    origemLng?: unknown,
+    destinoLat?: unknown,
+    destinoLng?: unknown
+  ) {
+    return calcularDistanciaKm(origemLat, origemLng, destinoLat, destinoLng);
+  }
+
+  private static alertarCoordenadasEnviadasSuspeitas(
+    origem: string,
+    latitudeEnviada: unknown,
+    longitudeEnviada: unknown,
+    latitudeConfirmada: number,
+    longitudeConfirmada: number
+  ) {
+    if (!coordenadasValidas(latitudeEnviada, longitudeEnviada)) return;
+
+    const diferencaKm = calcularDistanciaKm(
+      latitudeEnviada,
+      longitudeEnviada,
+      latitudeConfirmada,
+      longitudeConfirmada
+    );
+
+    if (diferencaKm !== null && diferencaKm > 5) {
+      console.warn(
+        `${origem}: coordenadas enviadas pelo cliente divergem da geocodificação em ${diferencaKm.toFixed(
+          1
+        )} km. Valor enviado ignorado.`
+      );
+    }
+  }
+
+  private static validarLocalizacaoVaga(dados: {
+    modalidade: VagaModalidade;
+    cep?: unknown;
+    endereco?: unknown;
+    cidade?: unknown;
+    estado?: unknown;
+    latitude?: unknown;
+    longitude?: unknown;
+  }) {
+    if (dados.modalidade === VagaModalidade.REMOTO) return null;
+
+    if (VagaController.enderecoMinimoPreenchido(dados)) return null;
+
+    return "Informe CEP válido, endereço, cidade e estado para vagas presenciais ou híbridas.";
+  }
+
   private static async sincronizarHabilidadesDaVaga(
     vagaId: number,
     habilidadeIds: number[]
@@ -70,8 +243,11 @@ export class VagaController {
         descricao,
         requisitos,
         modalidade,
-        latitude,
-        longitude,
+        cep,
+        endereco,
+        numero,
+        cidade,
+        estado,
         habilidadeIds,
       } = req.body;
 
@@ -96,16 +272,86 @@ export class VagaController {
         });
       }
 
+      const erroLocalizacao = VagaController.validarLocalizacaoVaga({
+        modalidade,
+        cep,
+        endereco,
+        cidade,
+        estado,
+      });
+
+      if (erroLocalizacao) {
+        return res.status(400).json({ message: erroLocalizacao });
+      }
+
+      let latitudeFinal: number | null = null;
+      let longitudeFinal: number | null = null;
+
+      if (modalidade !== VagaModalidade.REMOTO) {
+        const coordenadas = await geocodificarEndereco({
+          cep,
+          endereco,
+          numero,
+          cidade,
+          estado,
+        });
+
+        if (!coordenadas) {
+          return res.status(422).json({
+            message:
+              "Não foi possível localizar o endereço da vaga. Confira CEP, endereço, número, cidade e estado.",
+          });
+        }
+
+        latitudeFinal = coordenadas.latitude;
+        longitudeFinal = coordenadas.longitude;
+        VagaController.alertarCoordenadasEnviadasSuspeitas(
+          "Criação de vaga",
+          req.body.latitude,
+          req.body.longitude,
+          latitudeFinal,
+          longitudeFinal
+        );
+      }
+
       if (habilidadeIds !== undefined && !Array.isArray(habilidadeIds)) {
         return res.status(400).json({
           message: "O campo habilidadeIds deve ser um array.",
         });
       }
 
+      const cursosNormalizados = VagaController.normalizarListaCursos(
+        VagaController.obterCampoBody(
+          req.body,
+          "cursos_destinados",
+          "cursosDestinados"
+        )
+      );
+      const anoConclusaoMin = VagaController.normalizarAnoConclusao(
+        VagaController.obterCampoBody(
+          req.body,
+          "ano_conclusao_min",
+          "anoConclusaoMin"
+        )
+      );
+      const anoConclusaoMax = VagaController.normalizarAnoConclusao(
+        VagaController.obterCampoBody(
+          req.body,
+          "ano_conclusao_max",
+          "anoConclusaoMax"
+        )
+      );
+
+      VagaController.validarIntervaloConclusao(
+        anoConclusaoMin,
+        anoConclusaoMax
+      );
+
       const empresaRepository = AppDataSource.getRepository(Empresa);
 
       const empresa = await empresaRepository.findOne({
         where: { usuario: { id: usuarioLogadoId } }, // Busca a empresa que PERTENCE a esse usuário
+        relations: ["usuario"],
       });
 
       if (!empresa) {
@@ -122,9 +368,20 @@ export class VagaController {
         descricao,
         requisitos: requisitos || null,
         modalidade,
-        latitude: latitude ?? empresa.latitude ?? null,
-        longitude: longitude ?? empresa.longitude ?? null,
+        cep: VagaController.normalizarTextoOpcional(cep),
+        endereco: VagaController.normalizarTextoOpcional(endereco),
+        numero: VagaController.normalizarTextoOpcional(numero),
+        cidade: VagaController.normalizarTextoOpcional(cidade),
+        estado: VagaController.normalizarTextoOpcional(estado),
+        latitude: latitudeFinal ?? undefined,
+        longitude: longitudeFinal ?? undefined,
         habilidades: [],
+        cursos_destinados:
+          cursosNormalizados && cursosNormalizados.length > 0
+            ? cursosNormalizados
+            : null,
+        ano_conclusao_min: anoConclusaoMin ?? null,
+        ano_conclusao_max: anoConclusaoMax ?? null,
         ativo: 1,
       });
 
@@ -140,11 +397,38 @@ export class VagaController {
 
       const vagaCompleta = await VagaController.buscarVagaCompleta(vagaSalva.id);
 
+      try {
+        const usuarioRepository = AppDataSource.getRepository(Usuario);
+        const notificacaoRepository = AppDataSource.getRepository(Notificacao);
+        const alunos = await usuarioRepository.find({
+          where: { perfil: UsuarioPerfil.ALUNO },
+        });
+        const nomeEmpresa = empresa.usuario?.nome_exibicao;
+        const mensagem = nomeEmpresa
+          ? `A empresa ${nomeEmpresa} publicou a vaga "${vagaSalva.titulo}".`
+          : `Uma nova vaga foi publicada: "${vagaSalva.titulo}".`;
+        const notificacoes = alunos.map((aluno) =>
+          notificacaoRepository.create({
+            usuario_id: aluno.id,
+            tipo: "NOVA_VAGA",
+            titulo: "Nova vaga publicada",
+            mensagem,
+            link_id: vagaSalva.id,
+          })
+        );
+
+        if (notificacoes.length > 0) {
+          await notificacaoRepository.save(notificacoes);
+        }
+      } catch (error) {
+        console.error("Erro ao criar notificações de nova vaga:", error);
+      }
+
       return res.status(201).json(vagaCompleta);
     } catch (error: any) {
       const message = error.message || "Erro ao criar vaga.";
 
-      if (message.includes("habilidades")) {
+      if (message.includes("habilidades") || VagaController.erroValidacaoVaga(message)) {
         return res.status(400).json({ message });
       }
 
@@ -162,6 +446,55 @@ export class VagaController {
 
       const vagaRepository = AppDataSource.getRepository(Vaga);
       const empresaRepository = AppDataSource.getRepository(Empresa); 
+      const modalidadeQuery = req.query.modalidade?.toString();
+      const distanciaKmQuery = req.query.distanciaKm?.toString();
+      const cursoQuery = req.query.curso?.toString();
+      const cursoNormalizado = cursoQuery
+        ? VagaController.normalizarTextoBusca(cursoQuery)
+        : null;
+      const anoConclusaoQuery = (
+        req.query.anoConclusao ?? req.query.anoConclusaoAte
+      )?.toString();
+      const anoConclusaoFiltro =
+        anoConclusaoQuery !== undefined
+          ? VagaController.normalizarAnoConclusao(anoConclusaoQuery)
+          : undefined;
+
+      if (
+        modalidadeQuery &&
+        !Object.values(VagaModalidade).includes(modalidadeQuery as VagaModalidade)
+      ) {
+        return res.status(400).json({
+          message: "Modalidade inválida.",
+        });
+      }
+
+      const distanciaKm =
+        distanciaKmQuery !== undefined ? Number(distanciaKmQuery) : null;
+
+      if (
+        distanciaKmQuery !== undefined &&
+        (distanciaKm === null || !Number.isFinite(distanciaKm) || distanciaKm < 0)
+      ) {
+        return res.status(400).json({
+          message: "Distância inválida.",
+        });
+      }
+
+      // Admin pode listar todas as vagas para moderação.
+      if (perfilLogado === UsuarioPerfil.ADMIN) {
+        const vagas = await vagaRepository.find({
+          relations: [
+            "empresa",
+            "empresa.usuario",
+            "vagaHabilidades",
+            "vagaHabilidades.habilidade",
+          ],
+          order: { criado_em: "DESC" },
+        });
+
+        return res.status(200).json(vagas);
+      }
 
       // 1. Lógica para a EMPRESA (vê apenas as próprias vagas)
       if (perfilLogado === UsuarioPerfil.EMPRESA) {
@@ -200,7 +533,12 @@ export class VagaController {
       }
 
       const vagas = await vagaRepository.find({
-        where: { ativo: 1 },
+        where: {
+          ativo: 1,
+          ...(modalidadeQuery
+            ? { modalidade: modalidadeQuery as VagaModalidade }
+            : {}),
+        },
         relations: [
           "empresa",
           "empresa.usuario",
@@ -222,6 +560,15 @@ export class VagaController {
             habilidadesVaga.includes(h)
           );
 
+          const distancia_km = VagaController.calcularDistanciaKm(
+            aluno.latitude,
+            aluno.longitude,
+            vaga.latitude,
+            vaga.longitude
+          );
+          const distanciaKmFormatada =
+            distancia_km === null ? null : Number(distancia_km.toFixed(1));
+
           const match_percent = calcularMatchPercent(
             habilidadesAluno,
             habilidadesVaga,
@@ -233,10 +580,42 @@ export class VagaController {
 
           return {
             ...vaga,
+            distancia_km: distanciaKmFormatada,
             match_percent,
             skills_required: habilidadesVaga.length,
             skills_matched: habilidadesEmComum.length,
           };
+        })
+        .filter((vaga) => {
+          if (distanciaKm === null) return true;
+          if (vaga.modalidade === VagaModalidade.REMOTO) return true;
+          if (vaga.distancia_km === null) return false;
+          const limiteDistanciaKm = distanciaKm;
+          return vaga.distancia_km <= limiteDistanciaKm;
+        })
+        .filter((vaga) => {
+          if (!cursoNormalizado) return true;
+
+          const cursos = vaga.cursos_destinados;
+          if (!Array.isArray(cursos) || cursos.length === 0) return true;
+
+          return cursos.some(
+            (curso) =>
+              VagaController.normalizarTextoBusca(curso) === cursoNormalizado
+          );
+        })
+        .filter((vaga) => {
+          if (anoConclusaoFiltro === undefined || anoConclusaoFiltro === null) {
+            return true;
+          }
+
+          const min = vaga.ano_conclusao_min;
+          const max = vaga.ano_conclusao_max;
+
+          return (
+            (min === null || min === undefined || min <= anoConclusaoFiltro) &&
+            (max === null || max === undefined || max >= anoConclusaoFiltro)
+          );
         })
         .sort((a, b) => {
           if (b.match_percent !== a.match_percent) {
@@ -249,9 +628,15 @@ export class VagaController {
 
       return res.status(200).json(vagasComMatch);
     } catch (error: any) {
+      const message = error.message || "Erro ao listar vagas.";
+
+      if (VagaController.erroValidacaoVaga(message)) {
+        return res.status(400).json({ message });
+      }
+
       return res.status(500).json({
         message: "Erro ao listar vagas.",
-        error: error.message,
+        error: message,
       });
     }
   }
@@ -342,8 +727,11 @@ export class VagaController {
         descricao,
         requisitos,
         modalidade,
-        latitude,
-        longitude,
+        cep,
+        endereco,
+        numero,
+        cidade,
+        estado,
         habilidadeIds,
       } = req.body;
 
@@ -359,12 +747,160 @@ export class VagaController {
         });
       }
 
+      const modalidadeFinal = modalidade ?? vaga.modalidade;
+      const cepFinal =
+        cep === undefined ? vaga.cep : VagaController.normalizarTextoOpcional(cep);
+      const enderecoFinal =
+        endereco === undefined
+          ? vaga.endereco
+          : VagaController.normalizarTextoOpcional(endereco);
+      const cidadeFinal =
+        cidade === undefined
+          ? vaga.cidade
+          : VagaController.normalizarTextoOpcional(cidade);
+      const estadoFinal =
+        estado === undefined
+          ? vaga.estado
+          : VagaController.normalizarTextoOpcional(estado);
+      const latitudeFinal = vaga.latitude;
+      const longitudeFinal = vaga.longitude;
+      const numeroFinal =
+        numero === undefined
+          ? vaga.numero
+          : VagaController.normalizarTextoOpcional(numero);
+      const enderecoFoiAlterado = [
+        "cep",
+        "endereco",
+        "numero",
+        "cidade",
+        "estado",
+      ].some((campo) => Object.prototype.hasOwnProperty.call(req.body, campo));
+      let latitudeParaSalvar: number | null = null;
+      let longitudeParaSalvar: number | null = null;
+
+      const precisaRecalcularCoordenadas =
+        modalidadeFinal !== VagaModalidade.REMOTO &&
+        (enderecoFoiAlterado ||
+          !coordenadasValidas(latitudeFinal, longitudeFinal));
+
+      if (modalidadeFinal !== VagaModalidade.REMOTO && !precisaRecalcularCoordenadas) {
+        latitudeParaSalvar = Number(latitudeFinal);
+        longitudeParaSalvar = Number(longitudeFinal);
+      }
+
+      if (precisaRecalcularCoordenadas) {
+        const coordenadas = await geocodificarEndereco({
+          cep: cepFinal,
+          endereco: enderecoFinal,
+          numero: numeroFinal,
+          cidade: cidadeFinal,
+          estado: estadoFinal,
+        });
+
+        if (!coordenadas) {
+          return res.status(422).json({
+            message:
+              "Não foi possível localizar o endereço da vaga. Confira CEP, endereço, número, cidade e estado.",
+          });
+        }
+
+        latitudeParaSalvar = coordenadas.latitude;
+        longitudeParaSalvar = coordenadas.longitude;
+        VagaController.alertarCoordenadasEnviadasSuspeitas(
+          "Edição de vaga",
+          req.body.latitude,
+          req.body.longitude,
+          latitudeParaSalvar,
+          longitudeParaSalvar
+        );
+      }
+      const cursosForamEnviados = VagaController.bodyTemCampo(
+        req.body,
+        "cursos_destinados",
+        "cursosDestinados"
+      );
+      const anoMinFoiEnviado = VagaController.bodyTemCampo(
+        req.body,
+        "ano_conclusao_min",
+        "anoConclusaoMin"
+      );
+      const anoMaxFoiEnviado = VagaController.bodyTemCampo(
+        req.body,
+        "ano_conclusao_max",
+        "anoConclusaoMax"
+      );
+      const cursosNormalizados = cursosForamEnviados
+        ? VagaController.normalizarListaCursos(
+            VagaController.obterCampoBody(
+              req.body,
+              "cursos_destinados",
+              "cursosDestinados"
+            )
+          )
+        : undefined;
+      const anoConclusaoMin = anoMinFoiEnviado
+        ? VagaController.normalizarAnoConclusao(
+            VagaController.obterCampoBody(
+              req.body,
+              "ano_conclusao_min",
+              "anoConclusaoMin"
+            )
+          )
+        : undefined;
+      const anoConclusaoMax = anoMaxFoiEnviado
+        ? VagaController.normalizarAnoConclusao(
+            VagaController.obterCampoBody(
+              req.body,
+              "ano_conclusao_max",
+              "anoConclusaoMax"
+            )
+          )
+        : undefined;
+      const anoConclusaoMinFinal = anoMinFoiEnviado
+        ? anoConclusaoMin
+        : vaga.ano_conclusao_min;
+      const anoConclusaoMaxFinal = anoMaxFoiEnviado
+        ? anoConclusaoMax
+        : vaga.ano_conclusao_max;
+
+      const erroLocalizacao = VagaController.validarLocalizacaoVaga({
+        modalidade: modalidadeFinal,
+        cep: cepFinal,
+        endereco: enderecoFinal,
+        cidade: cidadeFinal,
+        estado: estadoFinal,
+        latitude: latitudeFinal,
+        longitude: longitudeFinal,
+      });
+
+      if (erroLocalizacao) {
+        return res.status(400).json({ message: erroLocalizacao });
+      }
+
+      VagaController.validarIntervaloConclusao(
+        anoConclusaoMinFinal,
+        anoConclusaoMaxFinal
+      );
+
       vaga.titulo = titulo ?? vaga.titulo;
       vaga.descricao = descricao ?? vaga.descricao;
       vaga.requisitos = requisitos ?? vaga.requisitos;
-      vaga.modalidade = modalidade ?? vaga.modalidade;
-      vaga.latitude = latitude ?? vaga.latitude;
-      vaga.longitude = longitude ?? vaga.longitude;
+      vaga.modalidade = modalidadeFinal;
+      vaga.cep = cepFinal ?? undefined;
+      vaga.endereco = enderecoFinal ?? undefined;
+      vaga.numero = numeroFinal ?? undefined;
+      vaga.cidade = cidadeFinal ?? undefined;
+      vaga.estado = estadoFinal ?? undefined;
+      (vaga as any).latitude = latitudeParaSalvar;
+      (vaga as any).longitude = longitudeParaSalvar;
+      if (cursosForamEnviados) {
+        vaga.cursos_destinados =
+          cursosNormalizados && cursosNormalizados.length > 0
+            ? cursosNormalizados
+            : null;
+      }
+      vaga.ano_conclusao_min = anoConclusaoMinFinal ?? null;
+      vaga.ano_conclusao_max = anoConclusaoMaxFinal ?? null;
 
       const vagaAtualizada = await vagaRepository.save(vaga);
 
@@ -389,7 +925,7 @@ export class VagaController {
     } catch (error: any) {
       const message = error.message || "Erro ao atualizar vaga.";
 
-      if (message.includes("habilidades")) {
+      if (message.includes("habilidades") || VagaController.erroValidacaoVaga(message)) {
         return res.status(400).json({ message });
       }
 

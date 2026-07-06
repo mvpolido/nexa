@@ -1,12 +1,40 @@
 import { Request, Response } from "express";
+import path from "path";
+import fs from "fs";
 import { AppDataSource } from "../data-source";
 import { Candidatura, CandidaturaStatus } from "../entities/Candidatura";
 import { Vaga } from "../entities/Vaga";
 import { Aluno } from "../entities/Aluno";
 import { Empresa } from "../entities/Empresa";
 import { UsuarioPerfil } from "../entities/Usuario";
+import { Mensagem } from "../entities/Mensagem";
+import { Notificacao } from "../entities/Notificacao";
 
 export class CandidaturaController {
+  private static enviarArquivoCurriculo(
+    res: Response,
+    filename?: string | null
+  ) {
+    if (!filename) {
+      return res.status(404).json({ message: "Currículo não anexado." });
+    }
+
+    const filePath = path.resolve(
+      __dirname,
+      "..",
+      "..",
+      "uploads",
+      "curriculos",
+      filename
+    );
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "Arquivo do currículo não encontrado." });
+    }
+
+    return res.sendFile(filePath);
+  }
+
   static async candidatar(req: Request, res: Response) {
     try {
       const usuarioLogadoId = (req as any).usuarioId;
@@ -63,17 +91,39 @@ export class CandidaturaController {
         });
       }
 
-      // CAPTURA DO ARQUIVO: Se o multer salvou o arquivo, pegamos o nome dele aqui
-      const curriculo_path = req.file ? req.file.filename : undefined;
+      const usarCurriculoPerfil =
+        req.body?.useCurriculoPerfil === "true" ||
+        req.body?.useCurriculoPerfil === true;
+      const curriculo_path = req.file
+        ? req.file.filename
+        : usarCurriculoPerfil
+          ? aluno.url_curriculo
+          : undefined;
+
+      if (usarCurriculoPerfil && !aluno.url_curriculo) {
+        return res.status(400).json({
+          message: "Você ainda não possui currículo salvo no perfil.",
+        });
+      }
 
       const novaCandidatura = candidaturaRepository.create({
         aluno,
         vaga,
         status: CandidaturaStatus.PENDENTE,
-        curriculo_path, // NOVO CAMPO: Salva o identificador único do PDF se ele foi anexado
+        curriculo_path,
       });
 
       const candidaturaSalva = await candidaturaRepository.save(novaCandidatura);
+      const notificacaoRepository = AppDataSource.getRepository(Notificacao);
+      const notificacaoEmpresa = notificacaoRepository.create({
+        usuario_id: vaga.empresa_id,
+        tipo: "NOVA_CANDIDATURA",
+        titulo: "Nova candidatura recebida",
+        mensagem: `Uma nova candidatura foi recebida para a vaga "${vaga.titulo}".`,
+        link_id: candidaturaSalva.id,
+      });
+
+      await notificacaoRepository.save(notificacaoEmpresa);
 
       return res.status(201).json({
         message: "Candidatura realizada com sucesso.",
@@ -215,7 +265,18 @@ export class CandidaturaController {
         });
       }
 
+      const empresaRepository = AppDataSource.getRepository(Empresa);
       const candidaturaRepository = AppDataSource.getRepository(Candidatura);
+
+      const empresa = await empresaRepository.findOne({
+        where: { usuario: { id: usuarioLogadoId } },
+      });
+
+      if (!empresa) {
+        return res.status(404).json({
+          message: "Perfil de empresa não encontrado para este usuário.",
+        });
+      }
 
       const candidatura = await candidaturaRepository.findOne({
         where: {
@@ -230,8 +291,7 @@ export class CandidaturaController {
         });
       }
 
-      // Valida se a empresa logada é a dona da vaga
-      if (candidatura.vaga.empresa_id !== usuarioLogadoId) {
+      if (candidatura.vaga.empresa_id !== empresa.id) {
         return res.status(403).json({
           message:
             "Você só pode alterar candidaturas de vagas da sua própria empresa.",
@@ -240,8 +300,44 @@ export class CandidaturaController {
 
       candidatura.status = status;
 
-      const candidaturaAtualizada =
-        await candidaturaRepository.save(candidatura);
+      const candidaturaAtualizada = await candidaturaRepository.save(candidatura);
+      const notificacaoRepository = AppDataSource.getRepository(Notificacao);
+      const notificacaoAluno = notificacaoRepository.create({
+        usuario_id: candidatura.aluno_id,
+        tipo: "STATUS_CANDIDATURA",
+        titulo: "Status da candidatura atualizado",
+        mensagem: `O status da sua candidatura para a vaga "${candidatura.vaga.titulo}" foi atualizado para ${status}.`,
+        link_id: candidatura.id,
+      });
+
+      await notificacaoRepository.save(notificacaoAluno);
+
+      // Gatilho do Chat: Mensagem Automática de Aceite
+      if (status === "ACEITA" || status === CandidaturaStatus.ACEITA) {
+        const mensagemRepository = AppDataSource.getRepository(Mensagem);
+        
+        const mensagemAutomatica = mensagemRepository.create({
+          candidatura_id: candidatura.id,
+          remetente_id: usuarioLogadoId,
+          conteudo: `Parabéns! Você foi selecionado para a vaga "${candidatura.vaga.titulo}". O chat agora está oficialmente liberado para conversarem.`,
+        });
+        
+        await mensagemRepository.save(mensagemAutomatica);
+
+        try {
+          const { getIO } = require("../socket");
+          const io = getIO();
+          io.to(`chat_${candidatura.id}`).emit("receive_message", {
+            id: mensagemAutomatica.id,
+            candidatura_id: candidatura.id,
+            remetente_id: usuarioLogadoId,
+            conteudo: mensagemAutomatica.conteudo,
+            enviado_em: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error("Socket.io não estava pronto para emitir a mensagem automática:", err);
+        }
+      }
 
       return res.status(200).json({
         message: "Status da candidatura updated com sucesso.",
@@ -250,6 +346,74 @@ export class CandidaturaController {
     } catch (error: any) {
       return res.status(500).json({
         message: "Erro ao atualizar status da candidatura.",
+        error: error.message,
+      });
+    }
+  }
+
+  static async listarMensagens(req: Request, res: Response) {
+    try {
+      const candidaturaId = Number(req.params.id);
+      const mensagemRepository = AppDataSource.getRepository(Mensagem);
+
+      const mensagens = await mensagemRepository.find({
+        where: { candidatura_id: candidaturaId },
+        order: { enviado_em: "ASC" },
+        relations: ["remetente"]
+      });
+
+      return res.status(200).json(mensagens);
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao listar histórico de mensagens do chat.",
+        error: error.message,
+      });
+    }
+  }
+
+  static async curriculoDaCandidatura(req: Request, res: Response) {
+    try {
+      const usuarioLogadoId = (req as any).usuarioId;
+      const perfilLogado = (req as any).usuarioPerfil;
+      const candidaturaId = Number(req.params.id);
+
+      if (!candidaturaId || Number.isNaN(candidaturaId)) {
+        return res.status(400).json({ message: "ID da candidatura inválido." });
+      }
+
+      const candidatura = await AppDataSource.getRepository(Candidatura).findOne({
+        where: { id: candidaturaId },
+        relations: ["vaga"],
+      });
+
+      if (!candidatura) {
+        return res.status(404).json({ message: "Candidatura não encontrada." });
+      }
+
+      if (
+        perfilLogado === UsuarioPerfil.ALUNO &&
+        candidatura.aluno_id !== usuarioLogadoId
+      ) {
+        return res.status(403).json({ message: "Acesso negado ao currículo." });
+      }
+
+      if (perfilLogado === UsuarioPerfil.EMPRESA) {
+        const empresa = await AppDataSource.getRepository(Empresa).findOne({
+          where: { usuario: { id: usuarioLogadoId } },
+        });
+
+        if (!empresa || candidatura.vaga.empresa_id !== empresa.id) {
+          return res.status(403).json({ message: "Acesso negado ao currículo." });
+        }
+      }
+
+      return CandidaturaController.enviarArquivoCurriculo(
+        res,
+        candidatura.curriculo_path
+      );
+    } catch (error: any) {
+      return res.status(500).json({
+        message: "Erro ao buscar currículo da candidatura.",
         error: error.message,
       });
     }

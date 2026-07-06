@@ -4,9 +4,9 @@ services:
     container_name: nexa_db
     restart: always
     environment:
-      POSTGRES_USER: nexa_user
-      POSTGRES_PASSWORD: nexa_password
-      POSTGRES_DB: nexa_db
+      POSTGRES_USER: ${POSTGRES_USER:-nexa_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexa_password}
+      POSTGRES_DB: ${POSTGRES_DB:-nexa_db}
     ports:
       - "5432:5432"
     volumes:
@@ -23,12 +23,18 @@ services:
     depends_on:
       - db
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: nexa_user
-      DB_PASS: nexa_password
-      DB_NAME: nexa_db
-      JWT_SECRET: supersecret
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-nexa_user}
+      DB_PASS: ${DB_PASS:-nexa_password}
+      DB_NAME: ${DB_NAME:-nexa_db}
+      JWT_SECRET: ${JWT_SECRET:-nexa_dev_jwt_secret}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
 
     volumes:
       - ./backend:/app             # 👈 O Túnel: conecta seu Linux Mint ao Container

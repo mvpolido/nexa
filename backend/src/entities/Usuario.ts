@@ -11,7 +11,8 @@ import { Empresa } from "./Empresa";
 
 export enum UsuarioPerfil {
   ALUNO = "aluno",
-  EMPRESA = "empresa"
+  EMPRESA = "empresa",
+  ADMIN = "admin"
 }
 
 @Entity("usuario")
@@ -34,6 +35,16 @@ export class Usuario {
     nullable: false
   })
   perfil!: UsuarioPerfil;
+
+  // --- NOVAS COLUNAS PARA RECUPERAÇÃO DE SENHA --- //
+  
+  @Column({ type: "varchar", nullable: true, select: false })
+  token_recuperacao?: string;
+
+  @Column({ type: "timestamp", nullable: true, select: false })
+  expiracao_token_recuperacao?: Date;
+
+  // ----------------------------------------------- //
 
   @CreateDateColumn()
   criado_em!: Date;

@@ -4,26 +4,33 @@ import { AppDataSource } from "./data-source";
 import { Usuario, UsuarioPerfil } from "./entities/Usuario";
 import { Aluno } from "./entities/Aluno";
 import { Empresa } from "./entities/Empresa";
-import { Habilidade } from "./entities/Habilidade";
+import { Habilidade, HabilidadeArea } from "./entities/Habilidade";
 import { Vaga, VagaModalidade } from "./entities/Vaga";
 import { Candidatura, CandidaturaStatus } from "./entities/Candidatura";
 import { AlunoHabilidade } from "./entities/AlunoHabilidade";
 import { VagaHabilidade } from "./entities/VagaHabilidade";
+import { habilidadesSeed } from "./data/habilidadesSeed";
+import { Curso } from "./entities/Curso";
+import { InstituicaoEnsino } from "./entities/InstituicaoEnsino";
+import { cursosSeed, instituicoesSeed } from "./data/catalogosSeed";
 
 const TEST_PASSWORD = "123456";
-
-const habilidadesIniciais = [
+const habilidadesAlunoTeste = [
   "Flutter",
   "Dart",
-  "React",
-  "Node.js",
-  "TypeScript",
   "Git",
-  "Docker",
-  "PostgreSQL",
   "APIs REST",
   "Comunicação",
 ];
+
+function normalizarCatalogoBusca(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
 
 async function runSeed() {
   try {
@@ -38,6 +45,58 @@ async function runSeed() {
     const candidaturaRepository = AppDataSource.getRepository(Candidatura);
     const alunoHabRepository = AppDataSource.getRepository(AlunoHabilidade);
     const vagaHabRepository = AppDataSource.getRepository(VagaHabilidade);
+    const cursoRepository = AppDataSource.getRepository(Curso);
+    const instituicaoRepository = AppDataSource.getRepository(InstituicaoEnsino);
+
+    const seedCursos = async () => {
+      const existentes = await cursoRepository.find();
+
+      for (const nome of cursosSeed) {
+        const nomeNormalizado = nome.trim().replace(/\s+/g, " ");
+        let curso = existentes.find(
+          (item) =>
+            normalizarCatalogoBusca(item.nome) ===
+            normalizarCatalogoBusca(nomeNormalizado)
+        );
+
+        if (!curso) {
+          curso = cursoRepository.create({ nome: nomeNormalizado, ativo: true });
+          existentes.push(curso);
+        }
+
+        curso.nome = nomeNormalizado;
+        await cursoRepository.save(curso);
+      }
+    };
+
+    const seedInstituicoes = async () => {
+      const existentes = await instituicaoRepository.find();
+
+      for (const dados of instituicoesSeed) {
+        const nomeNormalizado = dados.nome.trim().replace(/\s+/g, " ");
+        let instituicao = existentes.find(
+          (item) =>
+            normalizarCatalogoBusca(item.nome) ===
+            normalizarCatalogoBusca(nomeNormalizado)
+        );
+
+        if (!instituicao) {
+          instituicao = instituicaoRepository.create({
+            nome: nomeNormalizado,
+            ativa: true,
+          });
+          existentes.push(instituicao);
+        }
+
+        instituicao.nome = nomeNormalizado;
+        instituicao.sigla = dados.sigla;
+        await instituicaoRepository.save(instituicao);
+      }
+    };
+
+    console.log("\nCriando ou atualizando catálogos...");
+    await seedCursos();
+    await seedInstituicoes();
 
     const getOrCreateUsuario = async (
       email: string,
@@ -73,8 +132,8 @@ async function runSeed() {
       aluno.cpf = cpf;
       aluno.curso = "Engenharia de Software";
       aluno.url_curriculo = "https://example.com/aluno-teste-cv.pdf";
-      aluno.latitude = -23.5505;
-      aluno.longitude = -46.6333;
+      aluno.latitude = undefined;
+      aluno.longitude = undefined;
 
       return alunoRepository.save(aluno);
     };
@@ -94,21 +153,31 @@ async function runSeed() {
       empresa.id = usuario.id;
       empresa.cnpj = cnpj;
       empresa.descricao = "Empresa de tecnologia para testes da sprint";
-      empresa.latitude = -23.5505;
-      empresa.longitude = -46.6333;
+      empresa.latitude = undefined;
+      empresa.longitude = undefined;
 
       return empresaRepository.save(empresa);
     };
 
-    const getOrCreateHabilidade = async (nome: string) => {
-      let habilidade = await habilidadeRepository.findOne({ where: { nome } });
+    const getOrCreateHabilidade = async (dados: {
+      nome: string;
+      area: HabilidadeArea;
+    }) => {
+      const { nome, area } = dados;
+      const nomeNormalizado = nome.trim().replace(/\s+/g, " ");
+      let habilidade = await habilidadeRepository
+        .createQueryBuilder("habilidade")
+        .where("LOWER(habilidade.nome) = LOWER(:nome)", { nome: nomeNormalizado })
+        .getOne();
 
       if (!habilidade) {
-        habilidade = habilidadeRepository.create({ nome });
-        habilidade = await habilidadeRepository.save(habilidade);
+        habilidade = habilidadeRepository.create({ nome: nomeNormalizado, area });
       }
 
-      return habilidade;
+      habilidade.nome = nomeNormalizado;
+      habilidade.area = area;
+
+      return habilidadeRepository.save(habilidade);
     };
 
     const getOrCreateAlunoHabilidade = async (
@@ -133,9 +202,17 @@ async function runSeed() {
       descricao: string;
       requisitos: string;
       modalidade: VagaModalidade;
+      cep?: string;
+      endereco?: string;
+      numero?: string;
+      cidade?: string;
+      estado?: string;
       latitude?: number;
       longitude?: number;
       habilidades: string[];
+      cursos_destinados?: string[] | null;
+      ano_conclusao_min?: number | null;
+      ano_conclusao_max?: number | null;
     }) => {
       let vaga = await vagaRepository.findOne({
         where: { empresa_id: dados.empresa_id, titulo: dados.titulo },
@@ -151,9 +228,17 @@ async function runSeed() {
       vaga.descricao = dados.descricao;
       vaga.requisitos = dados.requisitos;
       vaga.modalidade = dados.modalidade;
+      vaga.cep = dados.cep;
+      vaga.endereco = dados.endereco;
+      vaga.numero = dados.numero;
+      vaga.cidade = dados.cidade;
+      vaga.estado = dados.estado;
       vaga.latitude = dados.latitude;
       vaga.longitude = dados.longitude;
       vaga.habilidades = dados.habilidades;
+      vaga.cursos_destinados = dados.cursos_destinados ?? null;
+      vaga.ano_conclusao_min = dados.ano_conclusao_min ?? null;
+      vaga.ano_conclusao_max = dados.ano_conclusao_max ?? null;
       vaga.ativo = 1;
 
       return vagaRepository.save(vaga);
@@ -201,20 +286,28 @@ async function runSeed() {
       "Empresa Teste",
       UsuarioPerfil.EMPRESA
     );
+    const adminUser = await getOrCreateUsuario(
+      "moderador@nexa.com",
+      "Moderador Nexa",
+      UsuarioPerfil.ADMIN
+    );
 
     const aluno = await getOrCreateAluno(alunoUser);
     const empresa = await getOrCreateEmpresa(empresaUser);
 
     console.log("Criando ou reutilizando habilidades...");
     const habilidades = new Map<string, Habilidade>();
-    for (const nome of habilidadesIniciais) {
-      const habilidade = await getOrCreateHabilidade(nome);
-      habilidades.set(nome, habilidade);
+    for (const habilidadeSeed of habilidadesSeed) {
+      const habilidade = await getOrCreateHabilidade(habilidadeSeed);
+      habilidades.set(habilidadeSeed.nome, habilidade);
     }
 
     console.log("Criando ou reutilizando vínculos aluno-habilidade...");
-    for (const habilidade of habilidades.values()) {
-      await getOrCreateAlunoHabilidade(aluno.id, habilidade.id);
+    for (const nomeHabilidade of habilidadesAlunoTeste) {
+      const habilidade = habilidades.get(nomeHabilidade);
+      if (habilidade) {
+        await getOrCreateAlunoHabilidade(aluno.id, habilidade.id);
+      }
     }
 
     console.log("Criando ou reutilizando vagas e vínculos vaga-habilidade...");
@@ -225,15 +318,32 @@ async function runSeed() {
         requisitos: "Conhecimento em Flutter, Dart, Git e APIs REST.",
         modalidade: VagaModalidade.REMOTO,
         habilidades: ["Flutter", "Dart", "Git", "APIs REST", "Comunicação"],
+        cursos_destinados: [
+          "Ciência da Computação",
+          "Engenharia de Software",
+          "Sistemas de Informação",
+        ],
+        ano_conclusao_min: 2026,
+        ano_conclusao_max: 2029,
       },
       {
         titulo: "Desenvolvedor Back-end Node.js",
         descricao: "Vaga de estágio para apoiar o desenvolvimento de APIs e integrações.",
         requisitos: "Conhecimento em Node.js, TypeScript, Docker e PostgreSQL.",
         modalidade: VagaModalidade.HIBRIDO,
-        latitude: -23.5505,
-        longitude: -46.6333,
+        cep: "01001000",
+        endereco: "Praça da Sé",
+        numero: "100",
+        cidade: "São Paulo",
+        estado: "SP",
         habilidades: ["Node.js", "TypeScript", "Docker", "PostgreSQL", "APIs REST"],
+        cursos_destinados: [
+          "Ciência da Computação",
+          "Engenharia de Software",
+          "Sistemas de Informação",
+        ],
+        ano_conclusao_min: 2026,
+        ano_conclusao_max: 2029,
       },
     ];
 
@@ -260,6 +370,7 @@ async function runSeed() {
     console.log("\nCredenciais de teste:");
     console.log(`Aluno:   ${alunoUser.email} / ${TEST_PASSWORD}`);
     console.log(`Empresa: ${empresaUser.email} / ${TEST_PASSWORD}`);
+    console.log(`Moderador: ${adminUser.email} / ${TEST_PASSWORD}`);
   } catch (error) {
     console.error("Erro ao executar seed:", error);
     process.exitCode = 1;

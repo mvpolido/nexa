@@ -30,4 +30,17 @@ router.patch(
   CandidaturaController.atualizarStatus
 );
 
+// NOVO: Rota para listar o histórico de mensagens do chat
+router.get(
+  "/candidaturas/:id/mensagens",
+  authMiddleware,
+  CandidaturaController.listarMensagens
+);
+
+router.get(
+  "/candidaturas/:id/curriculo",
+  authMiddleware,
+  CandidaturaController.curriculoDaCandidatura
+);
+
 export default router;

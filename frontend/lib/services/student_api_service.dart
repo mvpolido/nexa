@@ -1,9 +1,10 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'student_profile_model.dart';
+import '../models/student_profile_model.dart';
 
 class StudentApiService {
-  static const String baseUrl = 'http://localhost:3000'; // Alterar para IP da máquina em produção
+  static const String baseUrl =
+      'http://localhost:3000'; // Alterar para IP da máquina em produção
 
   static Future<StudentProfile> getStudentProfile(String token) async {
     try {

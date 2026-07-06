@@ -22,6 +22,22 @@ const options = {
           properties: {
             id: { type: "integer", example: 1 },
             nome: { type: "string", example: "React" },
+            area: {
+              type: "string",
+              enum: [
+                "TECNOLOGIA",
+                "ENGENHARIA",
+                "EXATAS",
+                "SAUDE",
+                "QUIMICA",
+                "FISICA",
+                "BIOLOGIA",
+                "COMUNICACAO",
+                "GESTAO",
+                "DESIGN",
+              ],
+              example: "TECNOLOGIA",
+            },
           },
         },
         HabilidadeInput: {
@@ -29,6 +45,7 @@ const options = {
           required: ["nome"],
           properties: {
             nome: { type: "string", example: "Node.js" },
+            area: { type: "string", example: "TECNOLOGIA" },
           },
         },
       },
@@ -133,6 +150,7 @@ const options = {
         get: {
           summary: "Lista habilidades cadastradas",
           tags: ["Habilidades"],
+          security: [{ bearerAuth: [] }],
           responses: {
             200: {
               description: "Lista de habilidades",
@@ -149,8 +167,10 @@ const options = {
           },
         },
         post: {
-          summary: "Cadastra uma nova habilidade",
+          summary: "Cadastra uma nova habilidade (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
           tags: ["Habilidades"],
+          security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -174,7 +194,29 @@ const options = {
               },
             },
             400: { description: "Campo nome é obrigatório" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
             409: { description: "Habilidade já cadastrada" },
+            500: { description: "Erro interno do servidor" },
+          },
+        },
+      },
+
+      "/habilidades/{id}": {
+        delete: {
+          summary: "Deleta uma habilidade (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
+          tags: ["Habilidades"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "integer" } },
+          ],
+          responses: {
+            200: { description: "Habilidade removida com sucesso" },
+            400: { description: "ID inválido" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+            404: { description: "Habilidade não encontrada" },
             500: { description: "Erro interno do servidor" },
           },
         },
@@ -185,6 +227,13 @@ const options = {
           summary: "Lista todas as vagas disponíveis",
           tags: ["Vagas"],
           security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: "modalidade", in: "query", schema: { type: "string" } },
+            { name: "distanciaKm", in: "query", schema: { type: "number" } },
+            { name: "curso", in: "query", schema: { type: "string" } },
+            { name: "anoConclusao", in: "query", schema: { type: "integer" } },
+            { name: "anoConclusaoAte", in: "query", schema: { type: "integer" } },
+          ],
           responses: {
             200: { description: "Lista retornada com sucesso" },
             401: { description: "Não autorizado" },
@@ -212,6 +261,13 @@ const options = {
                     },
                     latitude: { type: "number", example: -24.5505 },
                     longitude: { type: "number", example: -45.6333 },
+                    cursos_destinados: {
+                      type: "array",
+                      items: { type: "string" },
+                      example: ["Ciência da Computação", "Engenharia de Software"],
+                    },
+                    ano_conclusao_min: { type: "integer", nullable: true, example: 2026 },
+                    ano_conclusao_max: { type: "integer", nullable: true, example: 2029 },
                     habilidades: { 
                       type: "array", 
                       items: { type: "string" },
@@ -250,6 +306,12 @@ const options = {
                   properties: {
                     titulo: { type: "string" },
                     modalidade: { type: "string", enum: ["PRESENCIAL", "REMOTO", "HIBRIDO"] },
+                    cursos_destinados: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    ano_conclusao_min: { type: "integer", nullable: true },
+                    ano_conclusao_max: { type: "integer", nullable: true },
                   }
                 }
               }
@@ -274,7 +336,8 @@ const options = {
 
       "/users": {
         get: {
-          summary: "Lista todos os usuários",
+          summary: "Lista todos os usuários (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
           tags: ["Users"],
           security: [{ bearerAuth: [] }],
           responses: { 
@@ -296,21 +359,30 @@ const options = {
                   }
                 }
               }
-            } 
+            },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
           },
         },
       },
 
       "/users/{id}": {
         get: {
-          summary: "Busca um usuário pelo ID",
+          summary: "Busca um usuário pelo ID (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
           tags: ["Users"],
           security: [{ bearerAuth: [] }],
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
-          responses: { 200: { description: "OK" }, 404: { description: "Não encontrado" } },
+          responses: {
+            200: { description: "OK" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+            404: { description: "Não encontrado" },
+          },
         },
         put: {
-          summary: "Atualiza um usuário",
+          summary: "Atualiza um usuário (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
           tags: ["Users"],
           security: [{ bearerAuth: [] }],
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
@@ -328,16 +400,134 @@ const options = {
               },
             },
           },
-          responses: { 200: { description: "OK" } },
+          responses: {
+            200: { description: "OK" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+          },
         },
         delete: {
-          summary: "Deleta um usuário",
+          summary: "Deleta um usuário (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
           tags: ["Users"],
           security: [{ bearerAuth: [] }],
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
-          responses: { 200: { description: "OK" } },
+          responses: {
+            200: { description: "OK" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+          },
         },
       },
+
+      "/admin/dashboard/stats": {
+        get: {
+          summary: "Dashboard de estatísticas (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
+          tags: ["Admin"],
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: { description: "Estatísticas retornadas com sucesso" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+          },
+        },
+      },
+
+      "/admin/empresas/{id}/verificar": {
+        patch: {
+          summary: "Aplica selo de empresa verificada (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
+          tags: ["Admin"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "Empresa verificada com sucesso" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+            404: { description: "Empresa não encontrada" },
+          },
+        },
+      },
+
+      "/admin/vagas": {
+        get: {
+          summary: "Lista vagas para moderação (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
+          tags: ["Admin"],
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: { description: "Lista de vagas retornada com sucesso" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+          },
+        },
+      },
+
+      "/admin/vagas/{id}": {
+        delete: {
+          summary: "Remove vaga suspeita (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
+          tags: ["Admin"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "Vaga removida com sucesso" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+            404: { description: "Vaga não encontrada" },
+          },
+        },
+      },
+
+      "/admin/usuarios/admin": {
+        post: {
+          summary: "Cria outro administrador (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
+          tags: ["Admin"],
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["nome_exibicao", "email", "senha"],
+                  properties: {
+                    nome_exibicao: { type: "string", example: "Novo Admin" },
+                    email: { type: "string", example: "admin2@nexa.com" },
+                    senha: { type: "string", example: "123456" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: { description: "Administrador criado com sucesso" },
+            400: { description: "Dados inválidos" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+          },
+        },
+      },
+
+      "/admin/usuarios/{id}": {
+        delete: {
+          summary: "Remove usuário (Apenas Admin)",
+          description: "Requer usuário autenticado com perfil admin.",
+          tags: ["Admin"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "Usuário removido com sucesso" },
+            400: { description: "ID inválido" },
+            401: { description: "Não autorizado" },
+            403: { description: "Apenas administradores" },
+            404: { description: "Usuário não encontrado" },
+          },
+        },
+      },
+
     },
   },
   apis: [],

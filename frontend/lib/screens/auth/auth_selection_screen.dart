@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../../pages/login_page.dart';    // <-- CORRIGIDO: Apontando para as páginas reais

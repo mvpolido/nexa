@@ -5,7 +5,18 @@ import { cpf as cpfValidator, cnpj as cnpjValidator } from "cpf-cnpj-validator";
 import { AppDataSource } from "../data-source";
 import { Usuario, UsuarioPerfil } from "../entities/Usuario";
 import { Aluno } from "../entities/Aluno";
+import { AlunoHabilidade } from "../entities/AlunoHabilidade";
 import { Empresa } from "../entities/Empresa";
+import { Habilidade } from "../entities/Habilidade";
+import { uploadConfig } from "../config/multer";
+import { geocodificarEndereco } from "../utils/geocoding";
+import { calcularDistanciaKm, coordenadasValidas } from "../utils/distance";
+import {
+  mensagemAnoConclusaoInvalido,
+  parseAnoConclusao,
+} from "../utils/anoConclusao";
+import { getJwtSecret } from "../utils/jwtSecret";
+import { catalogoAtivoExiste } from "../controllers/CatalogoController";
 
 const router = Router();
 
@@ -13,7 +24,79 @@ function onlyNumbers(value: string | undefined): string {
   return (value || "").replace(/\D/g, "");
 }
 
-router.post("/register", async (req, res) => {
+function alertarCoordenadasEnviadasSuspeitas(
+  origem: string,
+  latitudeEnviada: unknown,
+  longitudeEnviada: unknown,
+  latitudeConfirmada: number,
+  longitudeConfirmada: number
+) {
+  if (!coordenadasValidas(latitudeEnviada, longitudeEnviada)) return;
+
+  const diferencaKm = calcularDistanciaKm(
+    latitudeEnviada,
+    longitudeEnviada,
+    latitudeConfirmada,
+    longitudeConfirmada
+  );
+
+  if (diferencaKm !== null && diferencaKm > 5) {
+    console.warn(
+      `${origem}: coordenadas enviadas pelo cliente divergem da geocodificação em ${diferencaKm.toFixed(
+        1
+      )} km. Valor enviado ignorado.`
+    );
+  }
+}
+
+function parseIdArrayField(value: any): { ids: number[]; invalid: boolean } {
+  if (value === undefined || value === null || value === "") {
+    return { ids: [], invalid: false };
+  }
+
+  let parsed = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return { ids: [], invalid: true };
+    }
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { ids: [], invalid: true };
+  }
+
+  const ids: number[] = [];
+  for (const item of parsed) {
+    if (
+      (typeof item !== "number" && typeof item !== "string") ||
+      !/^\d+$/.test(String(item).trim())
+    ) {
+      return { ids: [], invalid: true };
+    }
+
+    const id = Number(item);
+    if (!Number.isInteger(id) || id <= 0) {
+      return { ids: [], invalid: true };
+    }
+    ids.push(id);
+  }
+
+  return { ids: Array.from(new Set(ids)), invalid: false };
+}
+
+router.post("/register", (req, res, next) => {
+  uploadConfig.single("curriculo")(req, res, (error: any) => {
+    if (error) {
+      return res.status(400).json({
+        message: error.message || "Erro ao enviar currículo.",
+      });
+    }
+
+    return next();
+  });
+}, async (req, res) => {
   try {
     const {
       nome_exibicao,
@@ -30,7 +113,7 @@ router.post("/register", async (req, res) => {
       cep,
       endereco,
       numero,
-      url_curriculo
+      habilidadeIds,
     } = req.body;
 
     const senha = req.body.senha ?? req.body.password;
@@ -50,6 +133,7 @@ router.post("/register", async (req, res) => {
     const usuarioRepository = AppDataSource.getRepository(Usuario);
     const alunoRepository = AppDataSource.getRepository(Aluno);
     const empresaRepository = AppDataSource.getRepository(Empresa);
+    const habilidadeRepository = AppDataSource.getRepository(Habilidade);
 
     const usuarioExistente = await usuarioRepository.findOne({
       where: { email },
@@ -63,6 +147,11 @@ router.post("/register", async (req, res) => {
 
     const cpfLimpo = onlyNumbers(cpf);
     const cnpjLimpo = onlyNumbers(cnpj);
+    const cursoNormalizado = typeof curso === "string" ? curso.trim() : "";
+    const instituicaoNormalizada =
+      typeof instituicao === "string" ? instituicao.trim() : "";
+    const cepLimpo = onlyNumbers(cep);
+    const curriculoArquivo = req.file?.filename;
 
     if (perfil === UsuarioPerfil.ALUNO) {
       if (!cpfLimpo) {
@@ -73,7 +162,25 @@ router.post("/register", async (req, res) => {
 
       if (!cpfValidator.isValid(cpfLimpo)) {
         return res.status(400).json({
-          message: "CPF inválido",
+          message: "CPF inválido. Confira os números informados.",
+        });
+      }
+
+      if (!(await catalogoAtivoExiste("curso", cursoNormalizado))) {
+        return res.status(400).json({
+          message: "Curso inválido. Selecione uma opção da lista.",
+        });
+      }
+
+      if (!(await catalogoAtivoExiste("instituicao", instituicaoNormalizada))) {
+        return res.status(400).json({
+          message: "Instituição inválida. Selecione uma opção da lista.",
+        });
+      }
+
+      if (!cepLimpo || cepLimpo.length !== 8) {
+        return res.status(400).json({
+          message: "CEP inválido. Informe os 8 dígitos.",
         });
       }
 
@@ -86,6 +193,33 @@ router.post("/register", async (req, res) => {
           message: "CPF já cadastrado",
         });
       }
+
+      const anoConclusaoValidado = parseAnoConclusao(ano_conclusao);
+      if (anoConclusaoValidado === null) {
+        return res.status(400).json({
+          message: mensagemAnoConclusaoInvalido(),
+        });
+      }
+
+      const habilidadeIdsParsed = parseIdArrayField(habilidadeIds);
+      if (habilidadeIdsParsed.invalid) {
+        return res.status(400).json({
+          message: "O campo habilidadeIds deve ser um array JSON de IDs inteiros positivos.",
+        });
+      }
+
+      if (habilidadeIdsParsed.ids.length > 0) {
+        const habilidadesEncontradas = await habilidadeRepository
+          .createQueryBuilder("habilidade")
+          .where("habilidade.id IN (:...ids)", { ids: habilidadeIdsParsed.ids })
+          .getMany();
+
+        if (habilidadesEncontradas.length !== habilidadeIdsParsed.ids.length) {
+          return res.status(400).json({
+            message: "Uma ou mais habilidades informadas não existem.",
+          });
+        }
+      }
     }
 
     if (perfil === UsuarioPerfil.EMPRESA) {
@@ -97,7 +231,13 @@ router.post("/register", async (req, res) => {
 
       if (!cnpjValidator.isValid(cnpjLimpo)) {
         return res.status(400).json({
-          message: "CNPJ inválido",
+          message: "CNPJ inválido. Confira os números informados.",
+        });
+      }
+
+      if (!cepLimpo || cepLimpo.length !== 8) {
+        return res.status(400).json({
+          message: "CEP inválido. Informe os 8 dígitos.",
         });
       }
 
@@ -113,47 +253,124 @@ router.post("/register", async (req, res) => {
     }
 
     const senhaHash = await bcrypt.hash(senha, 10);
-
-    const novoUsuario = usuarioRepository.create({
-      nome_exibicao,
-      email,
-      senha_hash: senhaHash,
-      perfil,
-    });
-
-    const usuarioSalvo = await usuarioRepository.save(novoUsuario);
+    let usuarioSalvo: Usuario;
 
     if (perfil === UsuarioPerfil.ALUNO) {
-      const aluno = alunoRepository.create({
-        id: usuarioSalvo.id,
-        cpf: cpfLimpo,
-        curso: curso || null,
-        instituicao: instituicao || null,
-        ano_conclusao: ano_conclusao || null,
-        cep: cep || null,
-        endereco: endereco || null,
-        numero: numero || null,
-        latitude: latitude ?? null,
-        longitude: longitude ?? null,
-        url_curriculo: url_curriculo || null
+      const coordenadasAluno = await geocodificarEndereco({
+        cep: cepLimpo,
+        endereco,
+        numero,
       });
+      const latitudeAluno = coordenadasAluno?.latitude;
+      const longitudeAluno = coordenadasAluno?.longitude;
 
-      await alunoRepository.save(aluno);
+      if (!coordenadasValidas(latitudeAluno, longitudeAluno)) {
+        return res.status(422).json({
+          message:
+            "Não foi possível localizar o endereço do aluno. Confira CEP, endereço e número.",
+        });
+      }
+
+      alertarCoordenadasEnviadasSuspeitas(
+        "Cadastro de aluno",
+        latitude,
+        longitude,
+        Number(latitudeAluno),
+        Number(longitudeAluno)
+      );
+
+      const anoConclusaoValidado = parseAnoConclusao(ano_conclusao);
+      const habilidadeIdsUnicos = parseIdArrayField(habilidadeIds).ids;
+
+      usuarioSalvo = await AppDataSource.transaction(async (manager) => {
+        const novoUsuario = manager.create(Usuario, {
+          nome_exibicao,
+          email,
+          senha_hash: senhaHash,
+          perfil,
+        });
+        const usuarioCriado = await manager.save(Usuario, novoUsuario);
+
+        const aluno = manager.create(Aluno, {
+          id: usuarioCriado.id,
+          cpf: cpfLimpo,
+          curso: cursoNormalizado || undefined,
+          instituicao: instituicaoNormalizada || undefined,
+          ano_conclusao: anoConclusaoValidado || undefined,
+          cep: cepLimpo || undefined,
+          endereco: endereco || undefined,
+          numero: numero || undefined,
+          latitude: Number(latitudeAluno),
+          longitude: Number(longitudeAluno),
+          url_curriculo: curriculoArquivo || undefined,
+        });
+
+        await manager.save(Aluno, aluno);
+
+        if (habilidadeIdsUnicos.length > 0) {
+          await manager.save(
+            AlunoHabilidade,
+            habilidadeIdsUnicos.map((habilidadeId) =>
+              manager.create(AlunoHabilidade, {
+                aluno_id: aluno.id,
+                habilidade_id: habilidadeId,
+              })
+            )
+          );
+        }
+
+        return usuarioCriado;
+      });
+    } else {
+      let latitudeEmpresa =
+        coordenadasValidas(latitude, longitude) ? Number(latitude) : undefined;
+      let longitudeEmpresa =
+        coordenadasValidas(latitude, longitude) ? Number(longitude) : undefined;
+
+      if (latitudeEmpresa === undefined || longitudeEmpresa === undefined) {
+        const coordenadas = await geocodificarEndereco({
+          cep: cepLimpo,
+          endereco,
+          numero,
+        });
+        latitudeEmpresa = coordenadas?.latitude;
+        longitudeEmpresa = coordenadas?.longitude;
+      }
+
+      usuarioSalvo = await AppDataSource.transaction(async (manager) => {
+        const novoUsuario = manager.create(Usuario, {
+          nome_exibicao,
+          email,
+          senha_hash: senhaHash,
+          perfil,
+        });
+        const usuarioCriado = await manager.save(Usuario, novoUsuario);
+
+        const empresa = manager.create(Empresa, {
+          id: usuarioCriado.id,
+          cnpj: cnpjLimpo,
+          descricao: descricao || undefined,
+          latitude: latitudeEmpresa,
+          longitude: longitudeEmpresa,
+        });
+
+        await manager.save(Empresa, empresa);
+        return usuarioCriado;
+      });
     }
 
-    if (perfil === UsuarioPerfil.EMPRESA) {
-      const empresa = empresaRepository.create({
+    const token = jwt.sign(
+      {
         id: usuarioSalvo.id,
-        cnpj: cnpjLimpo,
-        descricao: descricao || null,
-        latitude: latitude ?? null,
-        longitude: longitude ?? null,
-      });
-
-      await empresaRepository.save(empresa);
-    }
+        userId: usuarioSalvo.id,
+        perfil: usuarioSalvo.perfil,
+      },
+      getJwtSecret(),
+      { expiresIn: "1d" }
+    );
 
     return res.status(201).json({
+      token,
       id: usuarioSalvo.id,
       nome_exibicao: usuarioSalvo.nome_exibicao,
       email: usuarioSalvo.email,
@@ -202,15 +419,13 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const secret = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
-
     const token = jwt.sign(
       {
         id: usuario.id,
         userId: usuario.id,
         perfil: usuario.perfil,
       },
-      secret,
+      getJwtSecret(),
       { expiresIn: "1d" }
     );
 
